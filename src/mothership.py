@@ -113,6 +113,7 @@ class Controller:
         self.ALT_SP = 10.0
         # update the setpoint message with the required altitude
         self.sp.position.z = self.ALT_SP
+
         #Match the velocity of the flying craft
         #self.sp.velocity.x = #x portion of velocity vector.
         #self.sp.velocity.y = #y portion of velocity vector.
@@ -124,12 +125,12 @@ class Controller:
         self.sp.position.x = 0.0
         self.sp.position.y = 0.0
 
-        # speed of the drone is set using MPC_XY_CRUISE parameter in MAVLink
-        # using QGroundControl. By default it is 5 m/s.
-
+        # For algorithm store which state of algorithm Quad is in
+        self.alg.safe        =  0 #When the quad is determine in position for step 2 this is true
+        self.alg.id_list     = [1, 2] #List of Aruco tags to use for localization. 
+        self.alg.id_loc_list = [[0,0,0],[0, 0,0]] #Location of Aruco tags.
 
 	# Callbacks
-
     ## local position callback
     def posCb(self, msg):
         self.local_pos.x = msg.pose.position.x
@@ -158,17 +159,17 @@ class Controller:
     def getTargetA(self, lat_target, lon_target, alt_target):
         self.A_lat = 0
 
-    def imageCallback(self, msg):
-        np_arr = np.fromstring(msg.data, np.uint8)
+    def locateAruco(self, img):
+        np_arr = np.fromstring(img.data, np.uint8)
         image_np = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
         cv2.imshow('cv_img', image_np)
         cv2.waitKey(2)
 
-    def motherShipLoc(self):
-        self.model_coordinates = rospy.ServiceProxy('/gazebo/get_model_state', GetModelState)
-        self.mShip_coordinates = self.model_coordinates("mothership", "")
-        self.z_position
+    def determineSafeZone(self)
+        if(insideSafeZone):
+            self.alg.safe = 1
 
+#Class to get the information from the Mothership in the sim.
 class Mothership:
     def __init__(self):
         model_coordinates = rospy.ServiceProxy('/gazebo/get_model_state', GetModelState)
@@ -180,7 +181,7 @@ class Mothership:
 
         print str( str('Mothership found at, X: ') + str(self.x)+ str(' Y: ') + str(self.y)+ str(' Z: ') + str(self.z))
 
-    def get_location(self):
+    def get_sim_location(self):
         #Just get the values from the ros connection to get the model state to use
         model_coordinates = rospy.ServiceProxy('/gazebo/get_model_state', GetModelState)
         mShip_coordinates = model_coordinates("mothership", "")
@@ -190,5 +191,14 @@ class Mothership:
         self.y = mShip_coordinates.pose.position.y
         self.z = mShip_coordinates.pose.position.z
 
-        #Print Mothership location
-        #print str( str('Mothership found at, X: ') + str(self.x)+ str(' Y: ') + str(self.y)+ str(' Z: ') + str(self.z))
+    def get_sim_world_location(self)
+        #Just get the values from the ros connection to get the model state to use
+        model_coordinates = rospy.ServiceProxy('/gazebo/get_model_state', GetModelState)
+        mShip_coordinates = model_coordinates("mothership", "")
+
+        #Update the locations to the Mothership object
+        self.x = mShip_coordinates.pose.position.x
+        self.y = mShip_coordinates.pose.position.y
+        self.z = mShip_coordinates.pose.position.z
+
+        
