@@ -166,6 +166,8 @@ class Controller:
         cv2.waitKey(2)
 
     def determineSafeZone(self)
+        #Function here will use the mothership location and the Quadcopters external points with a mix of
+        #visual location and gps loc to determine if the aircraft is ready to visual servo in.
         if(insideSafeZone):
             self.alg.safe = 1
 
@@ -192,6 +194,7 @@ class Mothership:
         self.z = mShip_coordinates.pose.position.z
 
     def get_sim_world_location(self)
+        #This function will need to be updated to transfer from sim location to World Location
         #Just get the values from the ros connection to get the model state to use
         model_coordinates = rospy.ServiceProxy('/gazebo/get_model_state', GetModelState)
         mShip_coordinates = model_coordinates("mothership", "")
@@ -200,5 +203,3 @@ class Mothership:
         self.x = mShip_coordinates.pose.position.x
         self.y = mShip_coordinates.pose.position.y
         self.z = mShip_coordinates.pose.position.z
-
-        
