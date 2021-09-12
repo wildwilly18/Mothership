@@ -1,0 +1,27 @@
+<?xml version="1.0" ?>
+<sdf version="1.5">
+    <model name="mothership">
+      <pose>0 0 10 0 0.10472 0</pose>
+      <include>
+        <uri>model://aruco_20_250</uri>
+        <pose>0.2 0 0 0 0 0</pose>
+      </include>
+      <include>
+        <uri>model://aruco_10_100</uri>
+        <pose>0 0 0 0 0 0</pose>
+      </include>
+	
+      <joint name="aruco1" type="fixed">
+        <child>aruco_20_250</child>
+        <parent>mothership</parent>
+      </joint>
+
+      <joint name="aruco2" type="fixed">
+        <child>aruco_10_100</child>
+        <parent>mothership</parent>
+      </joint>
+
+    <plugin name="model_push" filename="libmodel_push.so"/>
+
+    </model>
+</sdf>
