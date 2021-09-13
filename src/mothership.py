@@ -125,10 +125,23 @@ class Controller:
         self.sp.position.x = 0.0
         self.sp.position.y = 0.0
 
-        # For algorithm store which state of algorithm Quad is in
-        self.alg.safe        =  0 #When the quad is determine in position for step 2 this is true
-        self.alg.id_list     = [1, 2] #List of Aruco tags to use for localization. 
-        self.alg.id_loc_list = [[0,0,0],[0, 0,0]] #Location of Aruco tags.
+        #intantiate an alg
+        self.alg = self.Algorithm()
+
+    class Algorithm:
+        def __init__(self):     
+            # For algorithm store which state of algorithm Quad is in. May need multiple aruco dictionaries for big, med, small Tags
+            #Generated and this link https://chev.me/arucogen/
+            #Image Algorithm info
+            self.ARUCO_DICT    = cv2.aruco.Dictionary_get(cv2.aruco.DICT_6X6_100) #Initialize the Aruco Dictionary that the controller will use.
+            self.ARUCO_PARAMS  = cv2.aruco.DetectorParameters_create()
+            self.id_list       = [10]      #List of Aruco tags to use for localization. 
+            self.id_loc_list   = [[-1000,-1000,-1000]] #Location of Aruco tags. Init to -1000 as an extraneous value.
+            self.camera_matrix = np.array([[277.191356, 0, 320.5],[0, 277.191356, 240.5], [0, 0, 1]]) #Camera matrix for simulated camera. From fpv_cam.sdf
+            self.camera_dist   = np.array([0, 0, 0, 0]) #Distortion Coefficients for the simlated camera. set to 0 in sim. From fpv_cam.sdf
+
+            #Localizing Algorithm info
+            self.safe         =  0 #When the quad is determine in position for step 2 this is true 
 
 	# Callbacks
     ## local position callback
@@ -162,10 +175,36 @@ class Controller:
     def locateAruco(self, img):
         np_arr = np.fromstring(img.data, np.uint8)
         image_np = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
-        cv2.imshow('cv_img', image_np)
+
+        #Convert image to grey
+        grey_im  = cv2.cvtColor(image_np, cv2.COLOR_BGR2GRAY)
+        (corners, ids, rejected) = cv2.aruco.detectMarkers(grey_im, self.alg.ARUCO_DICT, parameters=self.alg.ARUCO_PARAMS)
+
+        if ids is not None:
+            cnt = 0
+
+            for id in ids:
+                #Set the length of the ID detected.
+                if(id[0] == 10):
+                    aruco_len = 0.1
+                if(id[0] == 20):
+                    aruco_len = 0.25
+
+                #Get the rotation vec and translation vec of the camera to the aruco I believe. can use this to control the quad.
+                rvecs, tvecs = cv2.aruco.estimatePoseSingleMarkers(corners[cnt], aruco_len, self.alg.camera_matrix, self.alg.camera_dist)
+
+                #Printing for debug purposes
+                loc_string = str('yaw: ') + str(rvecs[0][0][2]) + str(' z-dist: ') + str(tvecs[0][0][2])
+                print loc_string
+                cnt = cnt + 1
+                
+
+        cv2.imshow('cv_img', grey_im)
         cv2.waitKey(2)
 
-    def determineSafeZone(self)
+    def determineSafeZone(self):
+        #Function here will use the mothership location and the Quadcopters external points with a mix of
+        #visual location and gps loc to determine if the aircraft is ready to visual servo in.
         if(insideSafeZone):
             self.alg.safe = 1
 
@@ -191,7 +230,8 @@ class Mothership:
         self.y = mShip_coordinates.pose.position.y
         self.z = mShip_coordinates.pose.position.z
 
-    def get_sim_world_location(self)
+    def get_sim_world_location(self):
+        #This function will need to be updated to transfer from sim location to World Location
         #Just get the values from the ros connection to get the model state to use
         model_coordinates = rospy.ServiceProxy('/gazebo/get_model_state', GetModelState)
         mShip_coordinates = model_coordinates("mothership", "")
@@ -200,5 +240,3 @@ class Mothership:
         self.x = mShip_coordinates.pose.position.x
         self.y = mShip_coordinates.pose.position.y
         self.z = mShip_coordinates.pose.position.z
-
-        
