@@ -3,6 +3,7 @@
 import roslib
 import rospy
 import cv2
+import math
 import numpy as np
 
 # 3D point & Stamped Pose msgs
@@ -125,8 +126,10 @@ class Controller:
         self.sp.position.x = 0.0
         self.sp.position.y = 0.0
 
+        #initiate a Mothership
+        self.mShip = self.Mothership()
         #intantiate an alg
-        self.alg = self.Algorithm()
+        self.alg   = self.Algorithm()
 
     class Algorithm:
         def __init__(self):     
@@ -141,7 +144,59 @@ class Controller:
             self.camera_dist   = np.array([0, 0, 0, 0]) #Distortion Coefficients for the simlated camera. set to 0 in sim. From fpv_cam.sdf
 
             #Localizing Algorithm info
-            self.safe         =  0 #When the quad is determine in position for step 2 this is true 
+            self.visual_mode        = 0 #When the quad is determine in position for step 2 this is true 
+            self.vis_counter        = 0 #Track count of visual 
+            self.vis_found_last     = 0 #Keep track if last check aruco was found. help
+            self.vis_found_count    = 0 #Track consecutive vis found or not found for algorithm, weights single misses vs multiple frames of misses
+
+            self.algo_counter       = 0 #Here tracks count of each frame where position error from A is < 0.2m for all dirs and Aruco tag 10 is identified
+            self.mothership_vel     = 0 #Needed for calculating target for the quad
+            self.mothership_heading = 0 #Heading of mothership
+            self.pitch_2_match_vel  = 0 #Pitch required by quad to match mship vel
+
+            #Rendeszous target, 2m distance from the ship. Position behind and below to match quads estimated pitch for speed.
+            self.rs_target_x = -2 * math.cos(self.pitch_2_match_vel)
+            self.rs_target_y =  0
+            self.rs_target_z =  2 * math.sin(self.pitch_2_match_vel)
+            
+            #Visual Servo X, Y & Z positions, start at 2 m dist off the mship. Is a func of mship speed and pithc
+            #Below assumption is moving in x dir only
+            self.vs_target_x = -2 * math.cos(self.pitch_2_match_vel)
+            self.vs_target_y =  0 #eventually will 
+            self.vs_target_z =  2 * math.sin(self.pitch_2_match_vel)
+    #Class to get the information from the Mothership in the sim.
+
+    class Mothership:
+        def __init__(self):
+            model_coordinates = rospy.ServiceProxy('/gazebo/get_model_state', GetModelState)
+            mShip_coordinates = model_coordinates("mothership", "")
+
+            self.x = mShip_coordinates.pose.position.x
+            self.y = mShip_coordinates.pose.position.y
+            self.z = mShip_coordinates.pose.position.z
+
+            print str( str('Mothership found at, X: ') + str(self.x)+ str(' Y: ') + str(self.y)+ str(' Z: ') + str(self.z))
+
+        def get_sim_location(self):
+            #Just get the values from the ros connection to get the model state to use
+            model_coordinates = rospy.ServiceProxy('/gazebo/get_model_state', GetModelState)
+            mShip_coordinates = model_coordinates("mothership", "")
+
+            #Update the locations to the Mothership object
+            self.x = mShip_coordinates.pose.position.x
+            self.y = mShip_coordinates.pose.position.y
+            self.z = mShip_coordinates.pose.position.z
+
+        def get_sim_world_location(self):
+            #This function will need to be updated to transfer from sim location to World Location
+            #Just get the values from the ros connection to get the model state to use
+            model_coordinates = rospy.ServiceProxy('/gazebo/get_model_state', GetModelState)
+            mShip_coordinates = model_coordinates("mothership", "")
+
+            #Update the locations to the Mothership object
+            self.x = mShip_coordinates.pose.position.x
+            self.y = mShip_coordinates.pose.position.y
+            self.z = mShip_coordinates.pose.position.z
 
 	# Callbacks
     ## local position callback
@@ -171,6 +226,31 @@ class Controller:
 
     def getTargetA(self, lat_target, lon_target, alt_target):
         self.A_lat = 0
+
+    def locateArucoID(self, img, id):
+        np_arr = np.fromstring(img.data, np.uint8)
+        image_np = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+
+        #Convert image to grey
+        grey_im  = cv2.cvtColor(image_np, cv2.COLOR_BGR2GRAY)
+        (corners, ids, rejected) = cv2.aruco.detectMarkers(grey_im, self.alg.ARUCO_DICT, parameters=self.alg.ARUCO_PARAMS)
+
+        if ids is not None:
+            for id in ids:
+                #Set the length of the ID detected.
+                if(id[0] == 10):
+                    #Get the rotation vec and translation vec of the camera to the aruco I believe. can use this to control the quad.
+                    rvecs, tvecs = cv2.aruco.estimatePoseSingleMarkers(corners[cnt], aruco_len, self.alg.camera_matrix, self.alg.camera_dist)
+
+        #Printing for debug purposes
+        loc_string = str('yaw: ') + str(rvecs[0][0][2]) + str(' z-dist: ') + str(tvecs[0][0][2])
+        print loc_string
+        cnt = cnt + 1
+        err = [rvecs[0][0][2], tvecs[0][0][2]]
+        
+        return err
+        cv2.imshow('cv_img', grey_im)
+        cv2.waitKey(2)
 
     def locateAruco(self, img):
         np_arr = np.fromstring(img.data, np.uint8)
@@ -202,41 +282,38 @@ class Controller:
         cv2.imshow('cv_img', grey_im)
         cv2.waitKey(2)
 
-    def determineSafeZone(self):
+    def determineInSafeZone(self, img):
         #Function here will use the mothership location and the Quadcopters external points with a mix of
-        #visual location and gps loc to determine if the aircraft is ready to visual servo in.
-        if(insideSafeZone):
+        #visual location and gps loc to determine if the aircraft is in a state to stay/enter in visual servo mode.
+        #See paper for explanation
+        
+        #Locate Aruco ID 10, If visualized count up that it is established.
+        np_arr = np.fromstring(img.data, np.uint8)
+        image_np = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+
+        #Convert image to grey
+        grey_im  = cv2.cvtColor(image_np, cv2.COLOR_BGR2GRAY)
+        (corners, ids, rejected) = cv2.aruco.detectMarkers(grey_im, self.alg.ARUCO_DICT, parameters=self.alg.ARUCO_PARAMS)
+
+        if ids is not None:
+            if 10 in ids:
+                self.alg.vis_counter = self.alg.vis_counter + 1
+            else:
+                self.alg.vis_counter = self.alg.vis_counter - 1
+                 
+        #Check if rendesvouz location is established.
+        x_err = abs(self.local_pos.x - self.alg.rs_target_x)
+        y_err = abs(self.local_pos.y - self.alg.rs_target_y)
+        z_err = abs(self.local_pos.z - self.alg.rs_target_z)
+
+        #Check if errs < 0.2 m
+        if(x_err < 0.2 and y_err < 0.2 and z_err < 0.2):
+            self.alg.algo_counter = self.alg.algo_counter + 1
+        else:
+            self.alg.algo_counter = self.alg.algo_counter - 1
+
+        #First check 
+        if(self.alg.vis_counter > 10 and self.alg.algo_counter > 10):
             self.alg.safe = 1
-
-#Class to get the information from the Mothership in the sim.
-class Mothership:
-    def __init__(self):
-        model_coordinates = rospy.ServiceProxy('/gazebo/get_model_state', GetModelState)
-        mShip_coordinates = model_coordinates("mothership", "")
-
-        self.x = mShip_coordinates.pose.position.x
-        self.y = mShip_coordinates.pose.position.y
-        self.z = mShip_coordinates.pose.position.z
-
-        print str( str('Mothership found at, X: ') + str(self.x)+ str(' Y: ') + str(self.y)+ str(' Z: ') + str(self.z))
-
-    def get_sim_location(self):
-        #Just get the values from the ros connection to get the model state to use
-        model_coordinates = rospy.ServiceProxy('/gazebo/get_model_state', GetModelState)
-        mShip_coordinates = model_coordinates("mothership", "")
-
-        #Update the locations to the Mothership object
-        self.x = mShip_coordinates.pose.position.x
-        self.y = mShip_coordinates.pose.position.y
-        self.z = mShip_coordinates.pose.position.z
-
-    def get_sim_world_location(self):
-        #This function will need to be updated to transfer from sim location to World Location
-        #Just get the values from the ros connection to get the model state to use
-        model_coordinates = rospy.ServiceProxy('/gazebo/get_model_state', GetModelState)
-        mShip_coordinates = model_coordinates("mothership", "")
-
-        #Update the locations to the Mothership object
-        self.x = mShip_coordinates.pose.position.x
-        self.y = mShip_coordinates.pose.position.y
-        self.z = mShip_coordinates.pose.position.z
+        else:
+            self.alg.safe = 0
