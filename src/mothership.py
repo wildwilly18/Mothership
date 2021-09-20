@@ -108,6 +108,7 @@ class Controller:
         self.sp_glob.latitude  = 0
         self.sp_glob.longitude = 0
         self.sp_glob.altitude  = 0
+        self.sp_glob.yaw       = 0
         
         # We will fly at a fixed altitude for now
         # Altitude setpoint, [meters]
@@ -142,6 +143,7 @@ class Controller:
             self.id_loc_list   = [[-1000,-1000,-1000]] #Location of Aruco tags. Init to -1000 as an extraneous value.
             self.camera_matrix = np.array([[277.191356, 0, 320.5],[0, 277.191356, 240.5], [0, 0, 1]]) #Camera matrix for simulated camera. From fpv_cam.sdf
             self.camera_dist   = np.array([0, 0, 0, 0]) #Distortion Coefficients for the simlated camera. set to 0 in sim. From fpv_cam.sdf
+            self.img           = None
 
             #Localizing Algorithm info
             self.visual_mode        = 0 #When the quad is determine in position for step 2 this is true 
@@ -227,6 +229,40 @@ class Controller:
     def getTargetA(self, lat_target, lon_target, alt_target):
         self.A_lat = 0
 
+    def updateRendesvousLoc(self):
+        self.mShip.get_sim_location()
+
+        self.alg.rs_target_x = self.mShip.x + (2 * math.sin(self.alg.pitch_2_match_vel))
+        self.alg.rs_target_y = self.mShip.y
+        self.alg.rs_target_z = self.mShip.z - (2 * math.cos(self.alg.pitch_2_match_vel))
+
+    def updateVisLoc(self, img):
+        self.mShip.get_sim_location()
+
+        (corners, ids, rejected) = cv2.aruco.detectMarkers(img, self.alg.ARUCO_DICT, parameters=self.alg.ARUCO_PARAMS)
+
+        if ids is not None:
+            for id in ids:
+                #Set the length of the ID detected.
+                if(id[0] == 10):
+                    #Get the rotation vec and translation vec of the camera to the aruco I believe. can use this to control the quad.
+                    rvecs, tvecs = cv2.aruco.estimatePoseSingleMarkers(corners[cnt], aruco_len, self.alg.camera_matrix, self.alg.camera_dist)
+
+        #Simplify here. Going directly below. Will need to figure out how to calc err from a spot.
+        self.alg.vs_target_x = self.mShip.x - tvecs[0][0][0]
+        self.alg.vs_target_y = self.mShip.y - tvecs[0][0][1]
+        self.alg.vs_target_z = self.mShip.z - tvecs[0][0][2] + 0.25
+
+    def imgCallback(self, img):
+        np_arr = np.fromstring(img.data, np.uint8)
+        image_np = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+
+        #Convert image to grey
+        grey_im = cv2.cvtColor(image_np, cv2.COLOR_BGR2GRAY)
+
+        #Save this image in our object
+        self.alg.img = grey_im
+
     def locateArucoID(self, img, id):
         np_arr = np.fromstring(img.data, np.uint8)
         image_np = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
@@ -287,20 +323,16 @@ class Controller:
         #visual location and gps loc to determine if the aircraft is in a state to stay/enter in visual servo mode.
         #See paper for explanation
         
-        #Locate Aruco ID 10, If visualized count up that it is established.
-        np_arr = np.fromstring(img.data, np.uint8)
-        image_np = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
-
-        #Convert image to grey
-        grey_im  = cv2.cvtColor(image_np, cv2.COLOR_BGR2GRAY)
-        (corners, ids, rejected) = cv2.aruco.detectMarkers(grey_im, self.alg.ARUCO_DICT, parameters=self.alg.ARUCO_PARAMS)
+        #Gets image from our object
+        (corners, ids, rejected) = cv2.aruco.detectMarkers(img, self.alg.ARUCO_DICT, parameters=self.alg.ARUCO_PARAMS)
 
         if ids is not None:
             if 10 in ids:
                 self.alg.vis_counter = self.alg.vis_counter + 1
             else:
                 self.alg.vis_counter = self.alg.vis_counter - 1
-                 
+
+        print str("Alg Vis Counter: " + str(self.alg.vis_counter))      
         #Check if rendesvouz location is established.
         x_err = abs(self.local_pos.x - self.alg.rs_target_x)
         y_err = abs(self.local_pos.y - self.alg.rs_target_y)
