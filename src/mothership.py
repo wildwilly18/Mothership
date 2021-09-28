@@ -146,15 +146,23 @@ class Controller:
             self.img           = None
 
             #Localizing Algorithm info
-            self.visual_mode        = 0 #When the quad is determine in position for step 2 this is true 
-            self.vis_counter        = 0 #Track count of visual 
-            self.vis_found_last     = 0 #Keep track if last check aruco was found. help
-            self.vis_found_count    = 0 #Track consecutive vis found or not found for algorithm, weights single misses vs multiple frames of misses
+            self.visual_mode            =    0 #When the quad is determine in position for step 2 this is true
+            self.visual_first_encounter =    0 #False until first time a marker is detected. 
+            self.vis_counter            =    0 #Track count of visual 
+            self.vis_last               =    0 #Keep track if last check aruco was found.
+            self.vis_consecutive        =    0 #Track consecutive vis found or not found for algorithm, weights single misses vs multiple frames of misses
+            self.vis_counter_max_min    = 1000 #Saturation value for the visual counter
 
-            self.algo_counter       = 0 #Here tracks count of each frame where position error from A is < 0.2m for all dirs and Aruco tag 10 is identified
-            self.mothership_vel     = 0 #Needed for calculating target for the quad
-            self.mothership_heading = 0 #Heading of mothership
-            self.pitch_2_match_vel  = 0 #Pitch required by quad to match mship vel
+            #Rendesvouz algorithm trackers
+            self.rendesvous_mode      =    0 #Set the rendesvous mode on startup. 
+            self.algo_counter         =    0 #Here tracks count of each frame where position error from A is < specified value for all dirs
+            self.algo_last            =    0 #Track if previous frame aircraft was in the range
+            self.algo_consecutive     =    0 #Track consecutive frames of within error range
+            self.algo_counter_sat     = 1000 #Saturation value for position
+            self.algorithm_threshold  =  750 #Value for algorithm thresholds
+            self.mothership_vel       = 0 #Needed for calculating target for the quad
+            self.mothership_heading   = 0 #Heading of mothership
+            self.pitch_2_match_vel    = 0 #Pitch required by quad to match mship vel
 
             #Rendeszous target, 2m distance from the ship. Position behind and below to match quads estimated pitch for speed.
             self.rs_target_x = -2 * math.cos(self.pitch_2_match_vel)
@@ -245,14 +253,18 @@ class Controller:
             for id in ids:
                 #Set the length of the ID detected.
                 if(id[0] == 10):
+                    aruco_len = 0.1
                     #Get the rotation vec and translation vec of the camera to the aruco I believe. can use this to control the quad.
-                    rvecs, tvecs = cv2.aruco.estimatePoseSingleMarkers(corners[cnt], aruco_len, self.alg.camera_matrix, self.alg.camera_dist)
+                    rvecs, tvecs = cv2.aruco.estimatePoseSingleMarkers(corners[0], aruco_len, self.alg.camera_matrix, self.alg.camera_dist)
+                    #Simplify here. Going directly below. Will need to figure out how to calc err from a spot.
+                    self.alg.vs_target_x = self.mShip.x - (tvecs[0][0][0] * 0.1)
+                    self.alg.vs_target_y = self.mShip.y - (tvecs[0][0][1] * 0.1)
+                    self.alg.vs_target_z = self.mShip.z - (tvecs[0][0][2] *  0.1) - 1.5
 
-        #Simplify here. Going directly below. Will need to figure out how to calc err from a spot.
-        self.alg.vs_target_x = self.mShip.x - tvecs[0][0][0]
-        self.alg.vs_target_y = self.mShip.y - tvecs[0][0][1]
-        self.alg.vs_target_z = self.mShip.z - tvecs[0][0][2] + 0.25
-
+                    print str(" Location: X: " + str(self.mShip.x)+ " Y: " + str(self.mShip.y) + " Z: " +str(self.mShip.z))
+                    print str("Aruco Loc: X: " + str(tvecs[0][0][0])+ " Y: " + str(tvecs[0][0][1]) + " Z: " +str(tvecs[0][0][2]))
+                    print str("  Des Loc: X: " + str(self.alg.vs_target_x)+ " Y: " + str(self.alg.vs_target_y) + " Z: " +str(self.alg.vs_target_z))
+                    
     def imgCallback(self, img):
         np_arr = np.fromstring(img.data, np.uint8)
         image_np = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
@@ -318,34 +330,100 @@ class Controller:
         cv2.imshow('cv_img', grey_im)
         cv2.waitKey(2)
 
-    def determineInSafeZone(self, img):
-        #Function here will use the mothership location and the Quadcopters external points with a mix of
-        #visual location and gps loc to determine if the aircraft is in a state to stay/enter in visual servo mode.
-        #See paper for explanation
-        
-        #Gets image from our object
-        (corners, ids, rejected) = cv2.aruco.detectMarkers(img, self.alg.ARUCO_DICT, parameters=self.alg.ARUCO_PARAMS)
-
-        if ids is not None:
-            if 10 in ids:
-                self.alg.vis_counter = self.alg.vis_counter + 1
-            else:
-                self.alg.vis_counter = self.alg.vis_counter - 1
-
-        print str("Alg Vis Counter: " + str(self.alg.vis_counter))      
-        #Check if rendesvouz location is established.
+    def determineAtRendesvous(self):
+        #At Rendesvouz if Quadrotor is withing 0.5m error in x,y,z count up.
         x_err = abs(self.local_pos.x - self.alg.rs_target_x)
         y_err = abs(self.local_pos.y - self.alg.rs_target_y)
         z_err = abs(self.local_pos.z - self.alg.rs_target_z)
 
-        #Check if errs < 0.2 m
-        if(x_err < 0.2 and y_err < 0.2 and z_err < 0.2):
-            self.alg.algo_counter = self.alg.algo_counter + 1
-        else:
-            self.alg.algo_counter = self.alg.algo_counter - 1
+        if(x_err < 0.5 and y_err < 0.5 and z_err < 0.5):
+            if self.alg.algo_last is 1:
+                self.alg.algo_counter = self.alg.algo_counter + 1
+            else:
+                self.alg.algo_last = 1
+                self.alg.algo_counter = 1
 
-        #First check 
-        if(self.alg.vis_counter > 10 and self.alg.algo_counter > 10):
-            self.alg.safe = 1
         else:
-            self.alg.safe = 0
+            if self.alg.algo_last is 0:
+                self.alg.algo_counter = self.alg.algo_counter - 1
+            else:
+                self.alg.algo_last = 0
+                self.alg.algo_counter = -1
+
+    def determineVisualAlg(self, img):
+         #Gets image from our object
+        (corners, ids, rejected) = cv2.aruco.detectMarkers(img, self.alg.ARUCO_DICT, parameters=self.alg.ARUCO_PARAMS)
+
+        #Check here if ID 10 is located. Build our visual saturation off of this.
+        if ids is not None:
+            if 10 in ids:
+                self.alg.visual_first_encounter = 1
+                #Check if aruco with ID 10 was found the last frame
+                if self.alg.vis_last is 1:
+                    #If counter isn't saturated add to counter using funciton and increment counter. If Saturated, Pass
+                    if (self.alg.vis_counter < self.alg.vis_counter_max_min):
+                        self.alg.vis_counter = self.alg.vis_counter + (1 * self.alg.vis_consecutive)
+                        self.alg.vis_consecutive = self.alg.vis_consecutive + 1
+
+                        #If counter becomes greater than the saturation value then set it to max/min value.
+                        if (self.alg.vis_counter > self.alg.vis_counter_max_min):
+                            self.alg.vis_counter = self.alg.vis_counter_max_min
+                    else:
+                        pass
+
+                #If first time seeing the ID after  intitialize last/consecutive variables. Don't reset counter 
+                else:
+                    self.alg.vis_last        = 1
+                    self.alg.vis_consecutive = 1
+                    self.alg.vis_counter = self.alg.vis_counter + (1 * self.alg.vis_consecutive)
+
+            #Doing the inverse if not found.
+            else:
+                if self.alg.vis_last is 0:
+                    #If counter isn't saturated add to counter using function and increment counter. If Saturated pass.
+                    if(self.alg.vis_counter > -self.alg.vis_counter_max_min):
+                        self.alg.vis_counter = self.alg.vis_counter - (1 * self.alg.vis_consecutive)
+                        self.alg.vis_consecutive = self.alg.vis_consecutive + 1
+
+                        #If counter becomes less than the saturation max/min value then set to max/min value.
+                        if(self.alg.vis_counter < -self.alg.vis_counter_max_min):
+                            self.alg.vis_counter = -self.alg.vis_counter_max_min
+                    else:
+                        pass
+                else:
+                    self.alg.vis_last        =  0
+                    self.alg.vis_consecutive =  1
+                    self.alg.vis_counter = self.alg.vis_counter - (1 * self.alg.vis_consecutive)
+
+                    #Doing the inverse if not found.
+        #If we have encountered the tag for the first time and we no longer see the tag remove confidence in visual
+        elif(self.alg.visual_first_encounter == 1):
+            if self.alg.vis_last is 0:
+                #If counter isn't saturated add to counter using function and increment counter. If Saturated pass.
+                if(self.alg.vis_counter > -self.alg.vis_counter_max_min):
+                    self.alg.vis_counter = self.alg.vis_counter - (1 * self.alg.vis_consecutive)
+                    self.alg.vis_consecutive = self.alg.vis_consecutive + 1
+
+                    #If counter becomes less than the saturation max/min value then set to max/min value.
+                    if(self.alg.vis_counter < -self.alg.vis_counter_max_min):
+                        self.alg.vis_counter = -self.alg.vis_counter_max_min
+                else:
+                    pass
+            else:
+                self.alg.vis_last        =  0
+                self.alg.vis_consecutive =  1
+                self.alg.vis_counter = self.alg.vis_counter - (1 * self.alg.vis_consecutive)
+
+    def determineEnterVisualMode(self):
+        #Check the counters to see if at algorithm location and visual target identified
+        if (self.alg.vis_counter > self.alg.algorithm_threshold and self.alg.algo_counter > self.alg.algorithm_threshold):
+            #Set visual mode true if thresholds met. 
+            self.alg.visual_mode = 1
+    
+    def determineExitVisualMode(self):
+        #Algorithm counter is not used to determine exit of visual mode
+        if(self.alg.vis_counter < self.alg.algorithm_threshold):
+            #Exit visual mode and Reset first encounter of tag and reset the counter to 0
+            self.alg.visual_mode            = 0
+            self.alg.visual_first_encounter = 0
+            self.alg.vis_counter            = 0

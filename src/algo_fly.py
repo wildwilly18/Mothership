@@ -63,20 +63,42 @@ def main():
 
     # ROS main loop
     while not rospy.is_shutdown():
-        #Start by grabbing the Motherships position
+        #Start of the algorithm here.
+        #Calculate Rendesvous location
         cnt.updateRendesvousLoc()
-        cnt.determineInSafeZone(cnt.alg.img)
 
-        if cnt.alg.visual_mode:
-            cnt.updateVisLoc()
-            cnt.updateSp(cnt.alg.vs_target_x, cnt.alg.vs_target_y, cnt.alg.vs_target_z)
+        #Determine if the Aircraft is at Rendesvous Location.
+        cnt.determineAtRendesvous()
+        #Look for an ID and start tracking image confidence
+        cnt.determineVisualAlg(cnt.alg.img)
+
+        #Update the drone with the set point target
+        cnt.updateRendesvousLoc()
+        cnt.updateSp(cnt.alg.rs_target_x, cnt.alg.rs_target_y, cnt.alg.rs_target_z)
         
-        else:
-            cnt.updateRendesvousLoc()
-            cnt.updateSp(cnt.alg.rs_target_x, cnt.alg.rs_target_y, cnt.alg.rs_target_z)
-        
-        print(str("Visual Mode: " + str(cnt.alg.visual_mode)))
-    	sp_pub.publish(cnt.sp)
+        #Update the set point of the quad rotor.
+        sp_pub.publish(cnt.sp)
+        #Check if visual mode can be entered. If so function will update object with visual mode true
+        cnt.determineEnterVisualMode()
+
+        #If object can enter visual mode it will enter this loop. This loop only uses visual for confidence.
+        while cnt.alg.visual_mode:
+            #Locate the Aruco Marker and update 
+            cnt.determineVisualAlg(cnt.alg.img)
+
+            #Check if we exit visual mode
+            cnt.determineExitVisualMode()
+
+            #If still in visual mode
+            if cnt.alg.visual_mode:
+                cnt.updateVisLoc(cnt.alg.img)
+                cnt.updateSp(cnt.alg.vs_target_x, cnt.alg.vs_target_y, cnt.alg.vs_target_z)
+                
+                #Update the setpoint of the quadrotor based on the image translations.
+                sp_pub.publish(cnt.sp)
+
+            else:
+                pass #Pass and will exit since visual mode no longer is true
 
 if __name__ == '__main__':
 	try:
