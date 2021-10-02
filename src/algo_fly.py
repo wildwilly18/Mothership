@@ -80,9 +80,12 @@ def main():
         sp_pub.publish(cnt.sp)
         #Check if visual mode can be entered. If so function will update object with visual mode true
         cnt.determineEnterVisualMode()
-
+        print str("Visual Counter: " + str(cnt.alg.vis_counter) + " lg Counter: " + str(cnt.alg.algo_counter))
+        
         #If object can enter visual mode it will enter this loop. This loop only uses visual for confidence.
         while cnt.alg.visual_mode:
+            
+            print str("Visual Counter: " + str(cnt.alg.vis_counter))
             #Locate the Aruco Marker and update 
             cnt.determineVisualAlg(cnt.alg.img)
 
@@ -98,7 +101,7 @@ def main():
                 sp_pub.publish(cnt.sp)
 
             else:
-                pass #Pass and will exit since visual mode no longer is true
+                pass #Pass and will exit since visual mode no longer is true and return to Rendesvouz mode. 
 
 if __name__ == '__main__':
 	try:

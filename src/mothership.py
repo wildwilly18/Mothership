@@ -259,10 +259,10 @@ class Controller:
                     #Simplify here. Going directly below. Will need to figure out how to calc err from a spot.
                     self.alg.vs_target_x = self.mShip.x - (tvecs[0][0][0] * 0.1)
                     self.alg.vs_target_y = self.mShip.y - (tvecs[0][0][1] * 0.1)
-                    self.alg.vs_target_z = self.mShip.z - (tvecs[0][0][2] *  0.1) - 1.5
+                    self.alg.vs_target_z = self.mShip.z - (tvecs[0][0][2] * 0.1) - .5
 
                     print str(" Location: X: " + str(self.mShip.x)+ " Y: " + str(self.mShip.y) + " Z: " +str(self.mShip.z))
-                    print str("Aruco Loc: X: " + str(tvecs[0][0][0])+ " Y: " + str(tvecs[0][0][1]) + " Z: " +str(tvecs[0][0][2]))
+                    #print str("Aruco Loc: X: " + str(tvecs[0][0][0])+ " Y: " + str(tvecs[0][0][1]) + " Z: " +str(tvecs[0][0][2]))
                     print str("  Des Loc: X: " + str(self.alg.vs_target_x)+ " Y: " + str(self.alg.vs_target_y) + " Z: " +str(self.alg.vs_target_z))
                     
     def imgCallback(self, img):
@@ -336,19 +336,39 @@ class Controller:
         y_err = abs(self.local_pos.y - self.alg.rs_target_y)
         z_err = abs(self.local_pos.z - self.alg.rs_target_z)
 
+        print str( "X err: " + str(x_err) + " Y err: " + str(y_err) + " Z err: " + str(z_err))
         if(x_err < 0.5 and y_err < 0.5 and z_err < 0.5):
             if self.alg.algo_last is 1:
-                self.alg.algo_counter = self.alg.algo_counter + 1
+                #If isn't saturated add to counter. If saturated Pass
+                if (self.alg.algo_counter < self.alg.algo_counter_sat):
+                    self.alg.algo_counter = self.alg.algo_counter + (1 * self.alg.algo_consecutive)
+                    self.alg.algo_consecutive = self.alg.algo_consecutive + 1
+
+                    #Check if it becomes saturated
+                    if (self.alg.algo_counter > self.alg.algo_counter_sat):
+                        self.alg.algo_counter = self.alg.algo_counter_sat
+                else:
+                    pass
+
             else:
-                self.alg.algo_last = 1
-                self.alg.algo_counter = 1
+                self.alg.algo_counter     = self.alg.algo_counter + 1
+                self.alg.algo_consecutive = 1
+                self.alg.algo_last        = 1
 
         else:
             if self.alg.algo_last is 0:
-                self.alg.algo_counter = self.alg.algo_counter - 1
+                if(self.alg.algo_counter > -self.alg.algo_counter_sat):
+                    self.alg.algo_counter     = self.alg.algo_counter - (1 * self.alg.algo_consecutive)
+                    self.alg.algo_consecutive = self.alg.algo_consecutive + 1
+
+                    if(self.alg.algo_counter < -self.alg.algo_counter_sat):
+                        self.alg.algo_counter = -self.alg.algo_counter_sat
+                else:
+                    pass
             else:
-                self.alg.algo_last = 0
-                self.alg.algo_counter = -1
+                self.alg.algo_counter     = self.alg.algo_counter - 1
+                self.alg.algo_consecutive = 1
+                self.alg.algo_last        = 0
 
     def determineVisualAlg(self, img):
          #Gets image from our object
