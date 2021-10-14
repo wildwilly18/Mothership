@@ -126,6 +126,7 @@ class Controller:
         # initial values for setpoints
         self.sp.position.x = 0.0
         self.sp.position.y = 0.0
+        self.sp.yaw        = 4.0
 
         #initiate a Mothership
         self.mShip = self.Mothership()
@@ -160,9 +161,14 @@ class Controller:
             self.algo_consecutive     =    0 #Track consecutive frames of within error range
             self.algo_counter_sat     = 1000 #Saturation value for position
             self.algorithm_threshold  =  750 #Value for algorithm thresholds
-            self.mothership_vel       = 0 #Needed for calculating target for the quad
-            self.mothership_heading   = 0 #Heading of mothership
-            self.pitch_2_match_vel    = 0 #Pitch required by quad to match mship vel
+            self.mothership_vel       = 0    #Needed for calculating target for the quad
+            self.mothership_heading   = 0    #Heading of mothership
+            self.pitch_2_match_vel    = 0    #Pitch required by quad to match mship vel
+            self.rendesvouz_int       = 0    #Integrate the error for Rendesvouz command point. 
+            self.rendesvouz_int_gain  = 1.5  #Gain for the rendesvouz integrator error.
+            self.error_vec_last       = 0    #Error from previous for integrator
+            self.x_error_int          = 0    #x integrator value
+            self.y_error_int          = 0    #y integrator value
 
             #Rendeszous target, 2m distance from the ship. Position behind and below to match quads estimated pitch for speed.
             self.rs_target_x = -2 * math.cos(self.pitch_2_match_vel)
@@ -228,6 +234,7 @@ class Controller:
         self.sp.position.x = x_des
         self.sp.position.y = y_des
         self.sp.position.z = z_des
+        self.sp.yaw        = 2.0
 
     def globalLoc(self, msg):
         self.sp_glob.latitude  = msg.latitude
@@ -240,9 +247,27 @@ class Controller:
     def updateRendesvousLoc(self):
         self.mShip.get_sim_location()
 
-        self.alg.rs_target_x = self.mShip.x + (2 * math.sin(self.alg.pitch_2_match_vel))
-        self.alg.rs_target_y = self.mShip.y
+        self.alg.rs_target_x = self.mShip.x + (2 * math.sin(0)) #Eventually will be heading
+        self.alg.rs_target_y = self.mShip.y + (0) #Eventually will be heading 
         self.alg.rs_target_z = self.mShip.z - (2 * math.cos(self.alg.pitch_2_match_vel))
+
+        #Check error and integrate it.
+        error_vec = math.sqrt(((self.local_pos.x - self.alg.rs_target_x) * (self.local_pos.x - self.alg.rs_target_x)) + ((self.local_pos.y - self.alg.rs_target_y) * (self.local_pos.y - self.alg.rs_target_y)))
+
+        #Integrate error
+        rendesvouz_int = self.alg.rendesvouz_int + (0.5 * (error_vec + self.alg.error_vec_last))
+        self.alg.rendesvouz_int = rendesvouz_int
+        #Store error for last error
+        self.alg.error_vec_last = error_vec
+
+        x_error_int = error_vec * math.cos(0) * self.alg.rendesvouz_int_gain
+        y_error_int = error_vec * math.sin(0) * self.alg.rendesvouz_int_gain
+
+        #Add integrator to target.
+        print x_error_int
+        self.alg.rs_target_x = self.mShip.x + (2 * math.sin(0)) + x_error_int #Eventually will be heading
+        self.alg.rs_target_y = self.mShip.y  #Eventually will be heading 
+        self.alg.rs_target_z = self.mShip.z - (2 * math.cos(self.alg.pitch_2_match_vel))        
 
     def updateVisLoc(self, img):
         self.mShip.get_sim_location()
@@ -337,7 +362,7 @@ class Controller:
         z_err = abs(self.local_pos.z - self.alg.rs_target_z)
 
         print str( "X err: " + str(x_err) + " Y err: " + str(y_err) + " Z err: " + str(z_err))
-        if(x_err < 0.5 and y_err < 0.5 and z_err < 0.5):
+        if(x_err < 0.7 and y_err < 0.7 and z_err < 0.7):
             if self.alg.algo_last is 1:
                 #If isn't saturated add to counter. If saturated Pass
                 if (self.alg.algo_counter < self.alg.algo_counter_sat):
