@@ -1,0 +1,16 @@
+%Integrator Error.
+err_vec = 1;
+
+time = 1:.1:10;
+int = 0
+ints = length(time);
+for ii = length(time)
+    if ii == 1
+        int = 1;
+    else
+        ints(ii) = int(ii - 1) + 0.5*(err_vec + err_vec);
+    end
+
+end
+
+plot(time, ints)
