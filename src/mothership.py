@@ -5,6 +5,7 @@ import rospy
 import cv2
 import math
 import numpy as np
+import time
 
 # 3D point & Stamped Pose msgs
 from geometry_msgs.msg import Point, PoseStamped, Twist
@@ -30,7 +31,7 @@ class fcuModes:
     		takeoffService = rospy.ServiceProxy('mavros/cmd/takeoff', mavros_msgs.srv.CommandTOL)
     		takeoffService(altitude = 3)
     	except rospy.ServiceException, e:
-    		print "Service takeoff call failed: %s"%e
+    		print "Service takeoff call failed%s"%e
 
     def setArm(self):
         rospy.wait_for_service('mavros/cmd/arming')
@@ -165,7 +166,7 @@ class Controller:
             self.mothership_heading   = 0    #Heading of mothership
             self.pitch_2_match_vel    = 0    #Pitch required by quad to match mship vel
             self.rendesvouz_int       = 0    #Integrate the error for Rendesvouz command point. 
-            self.rendesvouz_int_gain  = 1.5  #Gain for the rendesvouz integrator error.
+            self.rendesvouz_int_gain  = 0.0005  #Gain for the rendesvouz integrator error.
             self.error_vec_last       = 0    #Error from previous for integrator
             self.x_error_int          = 0    #x integrator value
             self.y_error_int          = 0    #y integrator value
@@ -174,6 +175,10 @@ class Controller:
             self.rs_target_x = -2 * math.cos(self.pitch_2_match_vel)
             self.rs_target_y =  0
             self.rs_target_z =  2 * math.sin(self.pitch_2_match_vel)
+
+            self.rs_target_x_clean = self.rs_target_x
+            self.rs_target_y_clean = self.rs_target_y
+            self.rs_target_z_clean = self.rs_target_z
             
             #Visual Servo X, Y & Z positions, start at 2 m dist off the mship. Is a func of mship speed and pithc
             #Below assumption is moving in x dir only
@@ -247,26 +252,34 @@ class Controller:
     def updateRendesvousLoc(self):
         self.mShip.get_sim_location()
 
-        self.alg.rs_target_x = self.mShip.x + (2 * math.sin(0)) #Eventually will be heading
-        self.alg.rs_target_y = self.mShip.y + (0) #Eventually will be heading 
-        self.alg.rs_target_z = self.mShip.z - (2 * math.cos(self.alg.pitch_2_match_vel))
+        self.alg.rs_target_x_clean = self.mShip.x + (2 * math.sin(0)) #Eventually will be heading
+        self.alg.rs_target_y_clean = self.mShip.y + (0) #Eventually will be heading 
+        self.alg.rs_target_z_clean = self.mShip.z - (2 * math.cos(self.alg.pitch_2_match_vel))
 
         #Check error and integrate it.
-        error_vec = math.sqrt(((self.local_pos.x - self.alg.rs_target_x) * (self.local_pos.x - self.alg.rs_target_x)) + ((self.local_pos.y - self.alg.rs_target_y) * (self.local_pos.y - self.alg.rs_target_y)))
+        #x y plane error
+        error_vec = math.sqrt(((self.local_pos.x - self.alg.rs_target_x_clean) * (self.local_pos.x - self.alg.rs_target_x_clean)) + ((self.local_pos.y - self.alg.rs_target_y_clean) * (self.local_pos.y - self.alg.rs_target_y_clean)))
+        if (self.local_pos.x > self.alg.rs_target_x_clean):
+            error_dir = -1
+        else:
+            error_dir =  1
+
+        error_vec = error_dir * error_vec
 
         #Integrate error
         rendesvouz_int = self.alg.rendesvouz_int + (0.5 * (error_vec + self.alg.error_vec_last))
         self.alg.rendesvouz_int = rendesvouz_int
+
         #Store error for last error
         self.alg.error_vec_last = error_vec
 
-        x_error_int = error_vec * math.cos(0) * self.alg.rendesvouz_int_gain
+        self.alg.x_error_int = self.alg.rendesvouz_int * math.cos(0) * self.alg.rendesvouz_int_gain
         y_error_int = error_vec * math.sin(0) * self.alg.rendesvouz_int_gain
 
         #Add integrator to target.
-        print x_error_int
-        self.alg.rs_target_x = self.mShip.x + (2 * math.sin(0)) + x_error_int #Eventually will be heading
-        self.alg.rs_target_y = self.mShip.y  #Eventually will be heading 
+        #print x_error_int
+        self.alg.rs_target_x = self.mShip.x +  0.1 * error_vec + self.alg.x_error_int #Eventually will be including heading
+        self.alg.rs_target_y = self.mShip.y  #Eventually will be including heading 
         self.alg.rs_target_z = self.mShip.z - (2 * math.cos(self.alg.pitch_2_match_vel))        
 
     def updateVisLoc(self, img):
@@ -284,11 +297,12 @@ class Controller:
                     #Simplify here. Going directly below. Will need to figure out how to calc err from a spot.
                     self.alg.vs_target_x = self.mShip.x - (tvecs[0][0][0] * 0.1)
                     self.alg.vs_target_y = self.mShip.y - (tvecs[0][0][1] * 0.1)
-                    self.alg.vs_target_z = self.mShip.z - (tvecs[0][0][2] * 0.1) - .5
+                    self.alg.vs_target_z = self.mShip.z - (tvecs[0][0][2] * 0.1) - 1
+                    print 'in Vis'
 
-                    print str(" Location: X: " + str(self.mShip.x)+ " Y: " + str(self.mShip.y) + " Z: " +str(self.mShip.z))
+                    #print str(" Location: X: " + str(self.mShip.x)+ " Y: " + str(self.mShip.y) + " Z: " +str(self.mShip.z))
                     #print str("Aruco Loc: X: " + str(tvecs[0][0][0])+ " Y: " + str(tvecs[0][0][1]) + " Z: " +str(tvecs[0][0][2]))
-                    print str("  Des Loc: X: " + str(self.alg.vs_target_x)+ " Y: " + str(self.alg.vs_target_y) + " Z: " +str(self.alg.vs_target_z))
+                    #print str("  Des Loc: X: " + str(self.alg.vs_target_x)+ " Y: " + str(self.alg.vs_target_y) + " Z: " +str(self.alg.vs_target_z))
                     
     def imgCallback(self, img):
         np_arr = np.fromstring(img.data, np.uint8)
@@ -317,7 +331,7 @@ class Controller:
 
         #Printing for debug purposes
         loc_string = str('yaw: ') + str(rvecs[0][0][2]) + str(' z-dist: ') + str(tvecs[0][0][2])
-        print loc_string
+        #print loc_string
         cnt = cnt + 1
         err = [rvecs[0][0][2], tvecs[0][0][2]]
         
@@ -348,7 +362,7 @@ class Controller:
 
                 #Printing for debug purposes
                 loc_string = str('yaw: ') + str(rvecs[0][0][2]) + str(' z-dist: ') + str(tvecs[0][0][2])
-                print loc_string
+                #print loc_string
                 cnt = cnt + 1
                 
 
@@ -361,7 +375,7 @@ class Controller:
         y_err = abs(self.local_pos.y - self.alg.rs_target_y)
         z_err = abs(self.local_pos.z - self.alg.rs_target_z)
 
-        print str( "X err: " + str(x_err) + " Y err: " + str(y_err) + " Z err: " + str(z_err))
+        #print str( "X err: " + str(x_err) + " Y err: " + str(y_err) + " Z err: " + str(z_err))
         if(x_err < 0.7 and y_err < 0.7 and z_err < 0.7):
             if self.alg.algo_last is 1:
                 #If isn't saturated add to counter. If saturated Pass
@@ -407,7 +421,7 @@ class Controller:
                 if self.alg.vis_last is 1:
                     #If counter isn't saturated add to counter using funciton and increment counter. If Saturated, Pass
                     if (self.alg.vis_counter < self.alg.vis_counter_max_min):
-                        self.alg.vis_counter = self.alg.vis_counter + (1 * self.alg.vis_consecutive)
+                        self.alg.vis_counter = self.alg.vis_counter + (0.001 * self.alg.vis_consecutive**1.3)
                         self.alg.vis_consecutive = self.alg.vis_consecutive + 1
 
                         #If counter becomes greater than the saturation value then set it to max/min value.
@@ -420,14 +434,14 @@ class Controller:
                 else:
                     self.alg.vis_last        = 1
                     self.alg.vis_consecutive = 1
-                    self.alg.vis_counter = self.alg.vis_counter + (1 * self.alg.vis_consecutive)
+                    self.alg.vis_counter = self.alg.vis_counter + (0.001 * self.alg.vis_consecutive**1.3)
 
             #Doing the inverse if not found.
             else:
                 if self.alg.vis_last is 0:
                     #If counter isn't saturated add to counter using function and increment counter. If Saturated pass.
                     if(self.alg.vis_counter > -self.alg.vis_counter_max_min):
-                        self.alg.vis_counter = self.alg.vis_counter - (1 * self.alg.vis_consecutive)
+                        self.alg.vis_counter = self.alg.vis_counter - (0.001 * self.alg.vis_consecutive**1.3)
                         self.alg.vis_consecutive = self.alg.vis_consecutive + 1
 
                         #If counter becomes less than the saturation max/min value then set to max/min value.
@@ -438,7 +452,7 @@ class Controller:
                 else:
                     self.alg.vis_last        =  0
                     self.alg.vis_consecutive =  1
-                    self.alg.vis_counter = self.alg.vis_counter - (1 * self.alg.vis_consecutive)
+                    self.alg.vis_counter = self.alg.vis_counter - (0.001 * self.alg.vis_consecutive**1.3)
 
                     #Doing the inverse if not found.
         #If we have encountered the tag for the first time and we no longer see the tag remove confidence in visual
@@ -446,7 +460,7 @@ class Controller:
             if self.alg.vis_last is 0:
                 #If counter isn't saturated add to counter using function and increment counter. If Saturated pass.
                 if(self.alg.vis_counter > -self.alg.vis_counter_max_min):
-                    self.alg.vis_counter = self.alg.vis_counter - (1 * self.alg.vis_consecutive)
+                    self.alg.vis_counter = self.alg.vis_counter - (0.001 * self.alg.vis_consecutive**1.3)
                     self.alg.vis_consecutive = self.alg.vis_consecutive + 1
 
                     #If counter becomes less than the saturation max/min value then set to max/min value.
@@ -457,7 +471,7 @@ class Controller:
             else:
                 self.alg.vis_last        =  0
                 self.alg.vis_consecutive =  1
-                self.alg.vis_counter = self.alg.vis_counter - (1 * self.alg.vis_consecutive)
+                self.alg.vis_counter = self.alg.vis_counter - (0.001 * self.alg.vis_consecutive**1.3)
 
     def determineEnterVisualMode(self):
         #Check the counters to see if at algorithm location and visual target identified
@@ -472,3 +486,17 @@ class Controller:
             self.alg.visual_mode            = 0
             self.alg.visual_first_encounter = 0
             self.alg.vis_counter            = 0
+    
+    def logData(self, header=None):
+        elapsed_time = time.clock()
+        #If the user calls for header return the header or else just return the data. 
+        printheader = 'Elapsed_Time local_X local_Y local_Z R_target_X R_target_Y R_target_Z X_err_integrator Y_err_integrator visual_mode visual_first_enc Vis_counter Vis_last Vis_Consecutive ' +\
+            'Rendesvous_mode Algo_counter Algo_last Algo_consecutive \n'
+        printstr = '{0:.3f} {1:.3f} {2:.3f} {3:.3f} {4:.3f} {5:.3f} {6:.3f} {7:.3f} {8:.3f} {9} {10} {11:.3f} {12} {13:.3f} {14} {15:.3f} {16} {17:.3f} \n'.format(\
+            elapsed_time, self.local_pos.x, self.local_pos.y, self.local_pos.z, self.alg.rs_target_x_clean, self.alg.rs_target_y_clean, self.alg.rs_target_z_clean,         \
+                self.alg.x_error_int, self.alg.y_error_int, self.alg.visual_mode, self.alg.visual_first_encounter,self.alg.vis_counter,self.alg.vis_last, \
+                self.alg.vis_consecutive, self.alg.rendesvous_mode, self.alg.algo_counter, self.alg.algo_last, self.alg.algo_consecutive)
+        if header is None:
+            return printstr
+        else:
+            return printheader

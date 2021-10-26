@@ -4,8 +4,14 @@ import roslib
 import rospy
 import cv2
 import numpy as np
+import time
 
 def main():
+
+    #Get a start time of script
+    start_time = time.clock()
+
+
 
     # initiate node
     rospy.init_node('setpoint_node', anonymous=True)
@@ -15,6 +21,13 @@ def main():
 
     # controller object
     cnt = Controller()
+
+    #Open up a file to write the data too.
+    logFile = open("out.txt", 'w')
+    
+    printheader = cnt.logData('header')
+
+    logFile.writelines(printheader)
 
     # Mothership object to track
     #mShip = Mothership()
@@ -54,6 +67,8 @@ def main():
     # We need to send few setpoint messages, then activate OFFBOARD mode, to take effect
     k=0
     while k<10:
+        loggedData = cnt.logData()
+        print loggedData
         sp_pub.publish(cnt.sp)
         rate.sleep()
         k = k + 1
@@ -80,12 +95,18 @@ def main():
         sp_pub.publish(cnt.sp)
         #Check if visual mode can be entered. If so function will update object with visual mode true
         cnt.determineEnterVisualMode()
-        print str("Visual Counter: " + str(cnt.alg.vis_counter) + " lg Counter: " + str(cnt.alg.algo_counter))
+        loggedData = cnt.logData()
+        print loggedData
+        logFile.writelines(loggedData)
+
         
         #If object can enter visual mode it will enter this loop. This loop only uses visual for confidence.
         while cnt.alg.visual_mode:
             
-            print str("Visual Counter: " + str(cnt.alg.vis_counter))
+            loggedData = cnt.logData()
+            print loggedData
+            logFile.writelines(loggedData)
+
             #Locate the Aruco Marker and update 
             cnt.determineVisualAlg(cnt.alg.img)
 

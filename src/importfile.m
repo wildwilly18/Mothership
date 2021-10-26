@@ -30,7 +30,7 @@ opts.DataLines = dataLines;
 opts.Delimiter = " ";
 
 % Specify column names and types
-opts.VariableNames = ["Elapsed_Time", "local_X", "local_Y", "local_Z", "R_target_X", "R_target_Y", "R_target_Z", "X_err_integrator", "Y_err_integrator", "visual_mode", "visual_first_enc", "Vis_counter", "Vis_last", "Vis_Consecutive", "Rendesvous_mode", "Algo_counter", "Algo_last", "Algo_consecutive0703"];
+opts.VariableNames = ["Elapsed_Time", "local_X", "local_Y", "local_Z", "R_target_X", "R_target_Y", "R_target_Z", "X_err_integrator", "Y_err_integrator", "visual_mode", "visual_first_enc", "Vis_counter", "Vis_last", "Vis_Consecutive", "Rendesvous_mode", "Algo_counter", "Algo_last", "Algo_consecutive"];
 opts.VariableTypes = ["double", "double", "double", "double", "double", "double", "double", "double", "double", "double", "double", "double", "double", "double", "double", "double", "double", "double"];
 
 % Specify file level properties

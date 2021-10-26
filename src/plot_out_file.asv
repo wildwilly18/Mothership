@@ -38,6 +38,7 @@ legend; grid minor; hold off
 
 %Algorithm Counter Tiles
 nexttile
+
 plot(data.Elapsed_Time, data.Algo_counter, 'b-', 'DisplayName', 'R Algo Counter')
 hold on
 plot(data.Elapsed_Time, data.Vis_counter, 'g-', 'DisplayName', 'V Algo counter')
@@ -46,38 +47,36 @@ legend; grid minor; hold off
 
 %Algorithm Enabled and Last
 nexttile
-plot(data.Elapsed_Time, data.visual_mode, 'g--', 'DisplayName','Visual Mode')
+
+plot(data.Elapsed_Time, data.visual_mode, 'g', 'DisplayName','Visual Mode')
 hold on
-plot(data.Elapsed_Time, data.Algo_last, 'r--', 'DisplayName','R Algo Last')
-plot(data.Elapsed_Time, data.Vis_last, 'b--', 'DisplayName', 'V Algo Last')
-ylim([-0.2 1.2])
+plot(data.Elapsed_Time, data.Algo_last, 'r', 'DisplayName','R Algo Last')
+plot(data.Elapsed_Time, data.Vis_last, 'b', 'DisplayName', 'V Algo Last')
 title('Mode and Last Mode Tracker')
 legend; grid minor; hold off
 
 %Integrator counters
 nexttile
-plot(data.Elapsed_Time, data.X_err_integrator,'b--', 'DisplayName', 'X Int')
+plot(data.Elapsed_Time, data.X_err_integrator,'b-', 'DisplayName', 'X Int')
 hold on
-plot(data.Elapsed_Time, data.Y_err_integrator, 'g--', 'DisplayName', 'Y Int')
+plot(data.Elapsed_Time, data.Y_err_integrator, 'g-', 'DisplayName', 'Y Int')
 title('X and Y Integrators')
 legend; grid minor; hold off
 
 %Mode
 nexttile
-plot(data.Elapsed_Time, data.Rendesvous_mode,'b--', 'DisplayName', 'Rendesvous Mode')
+plot(data.Elapsed_Time, data.Rendesvous_mode,'b-', 'DisplayName', 'Rendesvous Mode')
 hold on
-plot(data.Elapsed_Time, data.visual_mode, 'g--', 'DisplayName', 'Visual Mode')
+plot(data.Elapsed_Time, data.visual_mode, 'g-', 'DisplayName', 'Visual Mode')
 title('Mode Enabled')
-ylim([-0.2 1.2])
 legend; grid minor; hold off
 
 %Integrator counters
 nexttile
-plot(data.Elapsed_Time, data.Rendesvous_mode,'b--', 'DisplayName', 'Rendesvous Mode')
+plot(data.Elapsed_Time, data.Rendesvous_mode,'b-', 'DisplayName', 'Rendesvous Mode')
 hold on
-plot(data.Elapsed_Time, data.visual_mode, 'g--', 'DisplayName', 'Visual Mode')
+plot(data.Elapsed_Time, data.visual_mode, 'g-', 'DisplayName', 'Visual Mode')
 title('Mode Enabled')
-ylim([-0.2 1.2])
 legend; grid minor; hold off
 
 %Consecutives
