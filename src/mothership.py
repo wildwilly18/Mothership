@@ -6,13 +6,15 @@ import cv2
 import math
 import numpy as np
 import time
+import tf.transformations
 
 # 3D point & Stamped Pose msgs
-from geometry_msgs.msg import Point, PoseStamped, Twist
-from sensor_msgs.msg   import NavSatFix
-from std_msgs.msg      import Float64
-from cv_bridge         import CvBridge
-from sensor_msgs.msg   import CompressedImage
+from geometry_msgs.msg       import Point, PoseStamped, Twist
+from sensor_msgs.msg         import NavSatFix, Imu
+from std_msgs.msg            import Float64
+from cv_bridge               import CvBridge
+from sensor_msgs.msg         import CompressedImage
+from scipy.spatial.transform import Rotation as R
 
 # import all mavros messages and services
 from mavros_msgs.msg import *
@@ -98,7 +100,7 @@ class Controller:
         self.sp = PositionTarget()
 
         # set the flag to use position setpoints and yaw angle
-        self.sp.type_mask = int('010111111000', 2)
+        #self.sp.type_mask = int('010111111000', 2)
         # LOCAL_NED
         self.sp.coordinate_frame = 1
 
@@ -124,10 +126,16 @@ class Controller:
         # A Message for the current local position of the drone
         self.local_pos = Point(0.0, 0.0, 1.0)
 
+        self.yaw   = 0
+        self.pitch = 0
+        self.roll  = 0
+
+
         # initial values for setpoints
         self.sp.position.x = 0.0
         self.sp.position.y = 0.0
-        self.sp.yaw        = 4.0
+        self.sp.yaw        = 0
+        self.sp.yaw_rate   = 0
 
         #initiate a Mothership
         self.mShip = self.Mothership()
@@ -141,9 +149,7 @@ class Controller:
             #Image Algorithm info
             self.ARUCO_DICT    = cv2.aruco.Dictionary_get(cv2.aruco.DICT_6X6_100) #Initialize the Aruco Dictionary that the controller will use.
             self.ARUCO_PARAMS  = cv2.aruco.DetectorParameters_create()
-            self.id_list       = [10]      #List of Aruco tags to use for localization. 
-            self.id_loc_list   = [[-1000,-1000,-1000]] #Location of Aruco tags. Init to -1000 as an extraneous value.
-            self.camera_matrix = np.array([[277.191356, 0, 320.5],[0, 277.191356, 240.5], [0, 0, 1]]) #Camera matrix for simulated camera. From fpv_cam.sdf
+            self.camera_matrix = np.array([[277.191356, 0, 159.5],[0, 277.191356, 119.5], [0, 0, 1]]) #Camera matrix for simulated camera. From fpv_cam.sdf
             self.camera_dist   = np.array([0, 0, 0, 0]) #Distortion Coefficients for the simlated camera. set to 0 in sim. From fpv_cam.sdf
             self.img           = None
 
@@ -156,20 +162,20 @@ class Controller:
             self.vis_counter_max_min    = 1000 #Saturation value for the visual counter
 
             #Rendesvouz algorithm trackers
-            self.rendesvous_mode      =    0 #Set the rendesvous mode on startup. 
-            self.algo_counter         =    0 #Here tracks count of each frame where position error from A is < specified value for all dirs
-            self.algo_last            =    0 #Track if previous frame aircraft was in the range
-            self.algo_consecutive     =    0 #Track consecutive frames of within error range
-            self.algo_counter_sat     = 1000 #Saturation value for position
-            self.algorithm_threshold  =  750 #Value for algorithm thresholds
-            self.mothership_vel       = 0    #Needed for calculating target for the quad
-            self.mothership_heading   = 0    #Heading of mothership
-            self.pitch_2_match_vel    = 0    #Pitch required by quad to match mship vel
-            self.rendesvouz_int       = 0    #Integrate the error for Rendesvouz command point. 
+            self.rendesvous_mode      =    0    #Set the rendesvous mode on startup. 
+            self.algo_counter         =    0    #Here tracks count of each frame where position error from A is < specified value for all dirs
+            self.algo_last            =    0    #Track if previous frame aircraft was in the range
+            self.algo_consecutive     =    0    #Track consecutive frames of within error range
+            self.algo_counter_sat     = 1000    #Saturation value for position
+            self.algorithm_threshold  =  750    #Value for algorithm thresholds
+            self.mothership_vel       =    0    #Needed for calculating target for the quad
+            self.mothership_heading   =    0    #Heading of mothership
+            self.pitch_2_match_vel    =    0    #Pitch required by quad to match mship vel
+            self.rendesvouz_int       =    0    #Integrate the error for Rendesvouz command point. 
             self.rendesvouz_int_gain  = 0.0005  #Gain for the rendesvouz integrator error.
-            self.error_vec_last       = 0    #Error from previous for integrator
-            self.x_error_int          = 0    #x integrator value
-            self.y_error_int          = 0    #y integrator value
+            self.error_vec_last       =    0    #Error from previous for integrator
+            self.x_error_int          =    0    #x integrator value
+            self.y_error_int          =    0    #y integrator value
 
             #Rendeszous target, 2m distance from the ship. Position behind and below to match quads estimated pitch for speed.
             self.rs_target_x = -2 * math.cos(self.pitch_2_match_vel)
@@ -221,10 +227,29 @@ class Controller:
 
 	# Callbacks
     ## local position callback
+    def orientation(self, msg):
+        orientation_q = msg.orientation
+
+        #print orientation_q
+    
+        angles = tf.transformations.euler_from_quaternion([orientation_q.x, orientation_q.y, orientation_q.z, orientation_q.w])
+        #print angles
+
     def posCb(self, msg):
         self.local_pos.x = msg.pose.position.x
         self.local_pos.y = msg.pose.position.y
         self.local_pos.z = msg.pose.position.z
+
+        #Get Quart and convert to Euler
+        orientation_q = msg.pose.orientation
+        angles = tf.transformations.euler_from_quaternion([orientation_q.x, orientation_q.y, orientation_q.z, orientation_q.w])
+
+        #print angles
+        self.roll  = angles[0]
+        self.pitch = angles[1]
+        self.yaw   = angles[2]
+
+        #print str('yaw: ' + str(self.yaw * 180 / 3.14) + ' pitch: ' + str(self.pitch * 180 / 3.14)+ ' roll: ' + str(self.roll * 180 / 3.14))
 
     ## Drone State callback
     def stateCb(self, msg):
@@ -235,11 +260,11 @@ class Controller:
         self.heading = msg.data
 
     ## Update setpoint message
-    def updateSp(self, x_des, y_des, z_des):
+    def updateSp(self, x_des, y_des, z_des, yaw=0):
         self.sp.position.x = x_des
         self.sp.position.y = y_des
         self.sp.position.z = z_des
-        self.sp.yaw        = 2.0
+        self.sp.yaw        = yaw
 
     def globalLoc(self, msg):
         self.sp_glob.latitude  = msg.latitude
@@ -290,20 +315,55 @@ class Controller:
         if ids is not None:
             for id in ids:
                 #Set the length of the ID detected.
-                if(id[0] == 10):
-                    aruco_len = 0.1
+                if(id[0] == 20):
+                    aruco_len = 0.25
                     #Get the rotation vec and translation vec of the camera to the aruco I believe. can use this to control the quad.
                     rvecs, tvecs = cv2.aruco.estimatePoseSingleMarkers(corners[0], aruco_len, self.alg.camera_matrix, self.alg.camera_dist)
-                    #Simplify here. Going directly below. Will need to figure out how to calc err from a spot.
-                    self.alg.vs_target_x = self.mShip.x - (tvecs[0][0][0] * 0.1)
-                    self.alg.vs_target_y = self.mShip.y - (tvecs[0][0][1] * 0.1)
-                    self.alg.vs_target_z = self.mShip.z - (tvecs[0][0][2] * 0.1) - 1
-                    print 'in Vis'
 
+                    print tvecs
+
+                    cam_pts = np.array([[-tvecs[0][0][1]], 
+                                         [tvecs[0][0][0]],
+                                         [tvecs[0][0][2]],
+                                        [1]])
+
+                    print cam_pts
+
+                    error = self.cam2Local(cam_pts)
+
+                    print error
+
+                                        #Simplify here. Going directly below. Will need to figure out how to calc err from a spot.
+                    self.alg.vs_target_x = self.mShip.x
+                    self.alg.vs_target_y = self.mShip.y
+                    self.alg.vs_target_z = 8 
+
+                    print str("X Loc:" + str(self.local_pos.x) + " X Err:" + str(error[0]))
+                    print str("Y Loc:" + str(self.local_pos.y) + " Y Err:" + str(error[1]))
+                    #print str('Loc ' + str(self.local_pos.z) + ' Error ' + str(error[2][0]))
                     #print str(" Location: X: " + str(self.mShip.x)+ " Y: " + str(self.mShip.y) + " Z: " +str(self.mShip.z))
                     #print str("Aruco Loc: X: " + str(tvecs[0][0][0])+ " Y: " + str(tvecs[0][0][1]) + " Z: " +str(tvecs[0][0][2]))
                     #print str("  Des Loc: X: " + str(self.alg.vs_target_x)+ " Y: " + str(self.alg.vs_target_y) + " Z: " +str(self.alg.vs_target_z))
-                    
+
+    def cam2Local(self, cam_pts):
+        #Here in the function build the Rot matrix of the quadcopter, take XYZ points from camera, [y x z 1] format. Rot_Mat * Cam_Pts will give Aruco wrld pts
+        
+
+        roll  = self.roll
+        pitch = self.pitch
+        yaw   = self.yaw 
+
+        #print str("Pitch: " + str(pitch) + " Roll: " + str(roll) + " Yaw: " + str(yaw))
+        rot_mat = np.array([[math.cos(roll)*math.cos(pitch),  (math.cos(roll)*math.sin(pitch)*math.sin(yaw))-(math.sin(roll)*math.cos(yaw)), math.cos(roll)*math.sin(pitch)*math.cos(yaw)+math.sin(roll)*math.sin(yaw), 0],
+                            [math.sin(roll)*math.cos(pitch),  (math.sin(roll)*math.sin(pitch)*math.sin(yaw))+(math.cos(pitch)*math.cos(yaw)), math.sin(roll)*math.sin(pitch)*math.cos(yaw)-math.cos(roll)*math.sin(yaw), 0],
+                            [              -math.sin(pitch),                                              math.cos(pitch)*math.sin(yaw),                                             math.cos(pitch)*math.cos(yaw), 0],
+                            [                             0,                                                                          0,                                                                         0, 1]])
+        Local_pts = np.matmul(rot_mat, cam_pts)
+
+        #print rot_mat
+
+        return Local_pts                    
+
     def imgCallback(self, img):
         np_arr = np.fromstring(img.data, np.uint8)
         image_np = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
@@ -313,6 +373,11 @@ class Controller:
 
         #Save this image in our object
         self.alg.img = grey_im
+
+        #print image for viewing purposes
+        cv2.imshow('cv_img', grey_im)                    
+        cv2.waitKey(2)
+
 
     def locateArucoID(self, img, id):
         np_arr = np.fromstring(img.data, np.uint8)
