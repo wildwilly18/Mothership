@@ -160,6 +160,13 @@ class Controller:
             self.vis_last               =    0 #Keep track if last check aruco was found.
             self.vis_consecutive        =    0 #Track consecutive vis found or not found for algorithm, weights single misses vs multiple frames of misses
             self.vis_counter_max_min    = 1000 #Saturation value for the visual counter
+            self.vis_P                  =  0.3 #Proportional gain for our Visual Controller, may need independant X and Y
+            self.vis_I                  = 0.08 #Integrator gain for our Visual Controller, may need independant X and Y 
+            self.vis_err_x_prev         =    0 #Previous x err
+            self.vis_err_y_prev         =    0 #Previous y err
+            self.vis_int_x              =    0 #Stored X integrator
+            self.vis_int_y              =    0 #Stored Y integrator
+            self.vis_int_max            =   50 #Maximum integrator value 
 
             #Rendesvouz algorithm trackers
             self.rendesvous_mode      =    0    #Set the rendesvous mode on startup. 
@@ -250,7 +257,6 @@ class Controller:
         self.yaw   = angles[2]
 
         #print str('yaw: ' + str(self.yaw * 180 / 3.14) + ' pitch: ' + str(self.pitch * 180 / 3.14)+ ' roll: ' + str(self.roll * 180 / 3.14))
-
     ## Drone State callback
     def stateCb(self, msg):
         self.state = msg
@@ -270,9 +276,6 @@ class Controller:
         self.sp_glob.latitude  = msg.latitude
         self.sp_glob.longitude = msg.longitude
         self.sp_glob.altitude  = msg.altitude
-
-    def getTargetA(self, lat_target, lon_target, alt_target):
-        self.A_lat = 0
 
     def updateRendesvousLoc(self):
         self.mShip.get_sim_location()
@@ -327,15 +330,36 @@ class Controller:
                                          [tvecs[0][0][2]],
                                         [1]])
 
-                    print cam_pts
-
                     error = self.cam2Local(cam_pts)
 
-                    print error
+                    x_error = error[0]
+                    y_error = error[1]
+                    z_error = error[2]
+
+                    #Calculate integrator value
+                    self.alg.vis_int_x = 0.5 * (x_error + self.alg.vis_err_x_prev)
+                    self.alg.vis_int_y = 0.5 * (y_error + self.alg.vis_err_y_prev)
+
+                    #Check max integrator values
+                    if(self.alg.vis_int_x > self.alg.vis_int_max):
+                        self.alg.vis_int_x = self.alg.vis_int_max
+                    elif(self.alg.vis_int_x < -self.alg.vis_int_max):
+                        self.alg.vis_int_x = -self.alg.vis_int_max
+
+                    if(self.alg.vis_int_y > self.alg.vis_int_max):
+                        self.alg.vis_int_y = self.alg.vis_int_max
+                    elif(self.alg.vis_int_y < -self.alg.vis_int_max):
+                        self.alg.vis_int_y = -self.alg.vis_int_max
+
+                    #After calculating integrator 
+                    self.alg.vis_err_x_prev = x_error
+                    self.alg.vis_err_y_prev = y_error
+
+                    print str('Y integrator: ' + str(self.alg.vis_int_y))
 
                                         #Simplify here. Going directly below. Will need to figure out how to calc err from a spot.
-                    self.alg.vs_target_x = self.mShip.x
-                    self.alg.vs_target_y = self.mShip.y
+                    self.alg.vs_target_x = self.local_pos.x - (x_error * self.alg.vis_P) - (self.alg.vis_int_x * self.alg.vis_I)
+                    self.alg.vs_target_y = self.local_pos.y - (y_error * self.alg.vis_P) - (self.alg.vis_int_y * self.alg.vis_I)
                     self.alg.vs_target_z = 8 
 
                     print str("X Loc:" + str(self.local_pos.x) + " X Err:" + str(error[0]))
