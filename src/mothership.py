@@ -169,16 +169,16 @@ class Controller:
             self.vis_int_max            =   50 #Maximum integrator value 
 
             #Rendesvouz algorithm trackers
-            self.rendesvous_mode      =     0    #Set the rendesvous mode on startup. 
-            self.algo_counter         =     0    #Here tracks count of each frame where position error from A is < specified value for all dirs
-            self.algo_last            =     0    #Track if previous frame aircraft was in the range
-            self.algo_consecutive     =     0    #Track consecutive frames of within error range
-            self.algo_counter_sat     =  1000    #Saturation value for position
-            self.algorithm_threshold  =   750    #Value for algorithm thresholds
-            self.mothership_vel       =     0    #Needed for calculating target for the quad
-            self.mothership_heading   =     0    #Heading of mothership
-            self.pitch_2_match_vel    =     0    #Pitch required by quad to match mship vel
-            self.rendesvouz_int       =     0    #Integrate the error for Rendesvouz command point. 
+            self.rendesvous_mode      =      0    #Set the rendesvous mode on startup. 
+            self.algo_counter         =      0    #Here tracks count of each frame where position error from A is < specified value for all dirs
+            self.algo_last            =      0    #Track if previous frame aircraft was in the range
+            self.algo_consecutive     =      0    #Track consecutive frames of within error range
+            self.algo_counter_sat     =   1000    #Saturation value for position
+            self.algorithm_threshold  =    750    #Value for algorithm thresholds
+            self.mothership_vel       =      0    #Needed for calculating target for the quad
+            self.mothership_heading   =      0    #Heading of mothership
+            self.pitch_2_match_vel    =      0    #Pitch required by quad to match mship vel
+            self.rendesvouz_int       =      0    #Integrate the error for Rendesvouz command point. 
             self.rendesvouz_int_gain  = 0.0005  #Gain for the rendesvouz integrator error.
             self.error_vec_last       =      0    #Error from previous for integrator
             self.x_error_int          =      0    #x integrator value
@@ -194,7 +194,7 @@ class Controller:
             self.vis_app_consecutive       =       0
             self.vis_app_threshold         =     750 #Threshold to turn on or off distance subtraction.
             self.vis_app_counter_min_max   =    1000
-            self.vis_app_dist_sub_rate     =  .00001 #Shows how many meters will be removed per frame. runs @~100Hz. this is ~1mm per second. about 1 minute to go 1m
+            self.vis_app_dist_sub_rate     =   .0001 #Shows how many meters will be removed per frame. runs @~100Hz. this is ~1mm per second. about 1 minute to go 1m
             self.quad_safe                 =   False    #Stor if the quad is in the safe zone for visual servo
             self.x_vis_err                 =       0
             self.y_vis_err                 =       0 
@@ -348,10 +348,12 @@ class Controller:
         safe_radius = 0.5 * (d**2 / self.alg.rendesvouz_dist)  #R = 0.5* (d^2 / d_not)
 
         #If close to quad use other portion of the system of equations.
-        if(safe_radius > (1.5 * quad_rad)):
-            safe_radius = 1.5 * quad_rad
+        if(safe_radius < (2 * quad_rad)):
+            safe_radius = 2 * quad_rad
 
         err_mag = math.sqrt((self.alg.x_vis_err ** 2) + (self.alg.y_vis_err ** 2) + (self.alg.z_vis_err ** 2))
+
+        #print str("Error Mag: " + str(err_mag) + " safe_radius: " + str(safe_radius))
 
         if(err_mag + quad_rad < safe_radius):
             self.alg.quad_safe = True
@@ -403,9 +405,10 @@ class Controller:
 
         if ids is not None:
             for id in ids:
+                
                 #Set the length of the ID detected.
-                if(id[0] == 20):
-                    aruco_len = 0.25
+                if(id[0] == 10):
+                    aruco_len = 0.1
                     #Get the rotation vec and translation vec of the camera to the aruco I believe. can use this to control the quad.
                     rvecs, tvecs = cv2.aruco.estimatePoseSingleMarkers(corners[0], aruco_len, self.alg.camera_matrix, self.alg.camera_dist)
 
@@ -668,6 +671,7 @@ class Controller:
             self.alg.visual_mode            = 0
             self.alg.visual_first_encounter = 0
             self.alg.vis_counter            = 0
+            self.alg.vis_app_dist           = self.alg.rendesvouz_dist
     
     def logData(self, header=None):
         elapsed_time = time.clock()
