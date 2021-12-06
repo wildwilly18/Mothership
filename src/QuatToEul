@@ -1,0 +1,2 @@
+quat = quaternion([0, 0, 0, 1]);
+eulerRad = euler(quat, 'XYZ','fame')
