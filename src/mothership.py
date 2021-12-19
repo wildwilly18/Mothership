@@ -160,9 +160,10 @@ class Controller:
             self.vis_last               =     0 #Keep track if last check aruco was found.
             self.vis_consecutive        =     0 #Track consecutive vis found or not found for algorithm, weights single misses vs multiple frames of misses
             self.vis_counter_max_min    =  1000 #Saturation value for the visual counter
-            self.vis_P                  =   0.6 #Proportional gain for our Visual Controller, may need independant X and Y
-            self.vis_I                  =   0.5 #Integrator gain for our Visual Controller, may need independant X and Y
-            self.vis_D                  =   0.2 #Derivative gain for our Visual Controller 
+            self.vis_P                  =   0.7 #Proportional gain for our Visual Controller, may need independant X and Y
+            self.vis_I                  =   0.000 #Integrator gain for our Visual Controller, may need independant X and Y
+            self.vis_D                  =   0.002 #Derivative gain for our Visual Controller
+            self.vis_ff                 =   1.0 #Gain for the feed forward value.
             self.vis_err_x_prev         =   0.0 #Previous x err
             self.vis_err_y_prev         =   0.0 #Previous y err
             self.vis_err_z_prev         =   0.0 #Previous z err
@@ -172,6 +173,7 @@ class Controller:
             self.vis_der_x              =   0.0 #Stored X derivative
             self.vis_der_y              =   0.0 #Stored Y derivative
             self.vis_int_max            =  50.0 #Maximum integrator value to prevent windup
+            self.alg_feedforward        =   0.0 #Take the algorithm Integrator Value and add it to the vis alg
 
             #Rendesvouz algorithm trackers
             self.rendesvous_mode      =      0    #Set the rendesvous mode on startup. 
@@ -190,7 +192,14 @@ class Controller:
             self.y_error_int          =    0.0    #y integrator value
             self.rendesvouz_dist      =    2.0    #distance in M that the rendesvouz point will be
             self.quad_radius          =    0.1    #Uncertainty sphere radius of the quadrotor
+            self.safe_radius          =    1.2    #Store the safe radius that is calculated for the visual algorithm
+            self.err_mag              =    0.0    #Err mag calculated for the visual algorithm
 
+            #Previous Set Point Value for storage
+            self.x_setpoint_prev      =    0.0
+            self.y_setpoint_prev      =    0.0
+            self.z_setpoint_prev      =    0.0
+            self.mode_fade_increment  =    0.0     #Fade value to go from rendesvouz to visual error tracking
 
             #Visual Approach Mode trackers
             self.vis_app_dist = self.rendesvouz_dist #Initialize our start with where we rendesvouz too
@@ -206,7 +215,7 @@ class Controller:
             self.z_vis_err                 =     0.0
             self.vis_target_dist           =    0.25 #How many meters the quad will target to be from the target
 
-            #Rendeszous target, 2m distance from the ship. Position behind and below to match quads estimated pitch for speed.
+            #Rendezvous target, 2m distance from the ship. Position behind and below to match quads estimated pitch for speed.
             self.rs_target_x = -self.rendesvouz_dist * math.cos(self.pitch_2_match_vel)
             self.rs_target_y =  0
             self.rs_target_z =  self.rendesvouz_dist * math.sin(self.pitch_2_match_vel)
@@ -220,6 +229,11 @@ class Controller:
             self.vs_target_x = -self.rendesvouz_dist * math.cos(self.pitch_2_match_vel)
             self.vs_target_y =  0 #eventually will 
             self.vs_target_z =  self.rendesvouz_dist * math.sin(self.pitch_2_match_vel)
+
+            #Save mixed target values as to not overwrite Visual or Rendezvous targets
+            self.fade_target_x = 0.0
+            self.fade_target_y = 0.0
+            self.fade_target_z = 0.0 
     #Class to get the information from the Mothership in the sim.
 
     class Mothership:
@@ -325,6 +339,9 @@ class Controller:
         self.alg.x_error_int = self.alg.rendesvouz_int * math.cos(0) * self.alg.rendesvouz_int_gain
         y_error_int = error_vec * math.sin(0) * self.alg.rendesvouz_int_gain
 
+        #Stor the integrator to transsfer to the visual algorithm
+        #self.alg.vis_int_x = self.alg.x_error_int
+
         #Add integrator to target.
         #print x_error_int
         self.alg.rs_target_x = self.mShip.x +  0.1 * error_vec + self.alg.x_error_int #Eventually will be including heading
@@ -360,6 +377,8 @@ class Controller:
         err_mag = math.sqrt((self.alg.x_vis_err ** 2) + (self.alg.y_vis_err ** 2) + (self.alg.z_vis_err ** 2))
 
         #print str("Error Mag: " + str(err_mag) + " safe_radius: " + str(safe_radius))
+        self.alg.safe_radius = safe_radius
+        self.alg.err_mag     = err_mag
 
         if(err_mag + quad_rad < safe_radius):
             self.alg.quad_safe = 1
@@ -437,9 +456,13 @@ class Controller:
                     self.updateVisualDist()
 
                     #Calculate integrator value
-                    self.alg.vis_int_x = 0.5 * (self.alg.x_vis_err + self.alg.vis_err_x_prev)
-                    self.alg.vis_int_y = 0.5 * (self.alg.y_vis_err + self.alg.vis_err_y_prev)
-                    self.alg.vis_int_z = 0.5 * (self.alg.z_vis_err + self.alg.vis_err_z_prev)
+                    frame_vis_int_x = 0.5 * (self.alg.x_vis_err + self.alg.vis_err_x_prev)
+                    frame_vis_int_y = 0.5 * (self.alg.y_vis_err + self.alg.vis_err_y_prev)
+                    frame_vis_int_z = 0.5 * (self.alg.z_vis_err + self.alg.vis_err_z_prev)
+
+                    self.alg.vis_int_x = self.alg.vis_int_x + frame_vis_int_x
+                    self.alg.vis_int_y = self.alg.vis_int_y + frame_vis_int_y
+                    self.alg.vis_int_z = self.alg.vis_int_z + frame_vis_int_z
 
                     #Check max integrator values
                     if(self.alg.vis_int_x > self.alg.vis_int_max):
@@ -467,12 +490,18 @@ class Controller:
                     self.alg.vis_err_z_prev = self.alg.z_vis_err
 
                     #Simplify here. Going directly below. Will need to figure out how to calc err from a spot.
-                    self.alg.vs_target_x = self.local_pos.x - (self.alg.x_vis_err * self.alg.vis_P) - (self.alg.vis_int_x * self.alg.vis_I) - (self.alg.vis_der_x * self.alg.vis_D)
+                    self.alg.vs_target_x = self.local_pos.x - (self.alg.x_vis_err * self.alg.vis_P) - (self.alg.vis_int_x * self.alg.vis_I) - (self.alg.vis_der_x * self.alg.vis_D) + (self.alg.alg_feedforward * self.alg.vis_ff)
                     self.alg.vs_target_y = self.local_pos.y - (self.alg.y_vis_err * self.alg.vis_P) - (self.alg.vis_int_y * self.alg.vis_I) - (self.alg.vis_der_y * self.alg.vis_D)
                     self.alg.vs_target_z = self.local_pos.z - (self.alg.z_vis_err * self.alg.vis_P) - (self.alg.vis_int_z * self.alg.vis_I)
 
                     #print str("X Loc:" + str(self.local_pos.x) + " X Err:" + str(self.alg.x_vis_err))
-                    print str("Z Loc:" + str(self.local_pos.z) + " Z Err:" + str(self.alg.z_vis_err) + " D: " + str(self.alg.vis_app_dist))
+                    #print str("Z Loc:" + str(self.local_pos.z) + " Z Err:" + str(self.alg.z_vis_err) + " D: " + str(self.alg.vis_app_dist))
+
+    def fadeToVisLoc(self):
+        #Take the Two types and fade and calculate the fade value.
+        self.alg.fade_target_x = self.alg.rs_target_x * (1 - self.alg.mode_fade_increment) + self.alg.vs_target_x * (self.alg.mode_fade_increment)
+        self.alg.fade_target_y = self.alg.rs_target_y * (1 - self.alg.mode_fade_increment) + self.alg.vs_target_y * (self.alg.mode_fade_increment)
+        self.alg.fade_target_z = self.alg.rs_target_z * (1 - self.alg.mode_fade_increment) + self.alg.vs_target_z * (self.alg.mode_fade_increment)
 
     def cam2Local(self, cam_pts):
         #Here in the function build the Rot matrix of the quadcopter, take XYZ points from camera, [y x z 1] format. Rot_Mat * Cam_Pts will give Aruco wrld pts
@@ -682,6 +711,9 @@ class Controller:
         if (self.alg.vis_counter > self.alg.algorithm_threshold and self.alg.algo_counter > self.alg.algorithm_threshold):
             #Set visual mode true if thresholds met. 
             self.alg.visual_mode = 1
+
+            #Transfer the Rendesvous Integrator here for the visual feedforward
+            self.alg.alg_feedforward = self.alg.x_error_int
     
     def determineExitVisualMode(self):
         #Algorithm counter is not used to determine exit of visual mode
@@ -690,6 +722,7 @@ class Controller:
             self.alg.visual_mode            = 0
             self.alg.visual_first_encounter = 0
             self.alg.vis_counter            = 0
+            self.alg.mode_fade_increment    = 0.0
             self.alg.vis_app_dist           = self.alg.rendesvouz_dist
     
     def logData(self, header=None):
@@ -697,8 +730,8 @@ class Controller:
         #If the user calls for header return the header or else just return the data. 
         printheader = 'Elapsed_Time local_X local_Y local_Z R_target_X R_target_Y R_target_Z X_err_integrator Y_err_integrator visual_mode visual_first_enc Vis_counter Vis_last Vis_Consecutive ' +\
             'Rendesvous_mode Algo_counter Algo_last Algo_consecutive Vis_app_dist Vis_app_cnt Vis_app_last Vis_app_consecutive quad_radius quad_safe x_vis_err y_vis_err z_vis_err vis_int_x' +\
-                'vis_int_y\n'
-        printstr = '{0:.3f} {1:.3f} {2:.3f} {3:.3f} {4:.3f} {5:.3f} {6:.3f} {7:.3f} {8:.3f} {9} {10} {11} {12} {13} {14} {15} {16} {17} {18:.3f} {19} {20} {21} {22} {23} {24:.3f} {25:.3f} {26:.3f} {27:.3f} {28:.3f} {29:.3f} {30:.3f} {31:.3f}\n'.format(\
+                'vis_int_y vis_int_z vis_der_x vis_der_y\n'
+        printstr = '{0:.3f} {1:.3f} {2:.3f} {3:.3f} {4:.3f} {5:.3f} {6:.3f} {7:.3f} {8:.3f} {9} {10} {11} {12} {13} {14} {15} {16} {17} {18:.3f} {19} {20} {21} {22:.3f} {23:.3f} {24:.3f} {25} {26:.3f} {27:.3f} {28:.3f} {29:.3f} {30:.3f} {31:.3f} {32:.3f} {33:.3f} {34:.3f} {35:.3f} {36:.3f} {37:.3f} {38:.3f} {39:.3f} {40:.3f} {41:.3f} {42:.3f} {43:.3f}\n'.format(\
             elapsed_time,\
             self.local_pos.x, \
             self.local_pos.y,\
@@ -722,6 +755,8 @@ class Controller:
             self.alg.vis_app_last,\
             self.alg.vis_app_consecutive,\
             self.alg.quad_radius,\
+            self.alg.safe_radius,\
+            self.alg.err_mag,\
             self.alg.quad_safe,\
             float(self.alg.x_vis_err),\
             float(self.alg.y_vis_err),\
@@ -730,7 +765,17 @@ class Controller:
             float(self.alg.vis_int_y),\
             float(self.alg.vis_int_z),\
             float(self.alg.vis_der_x),\
-            float(self.alg.vis_der_y))
+            float(self.alg.vis_der_y),\
+            float(self.sp.position.x),\
+            float(self.sp.position.y),\
+            float(self.sp.position.z),\
+            float(self.alg.fade_target_x),\
+            float(self.alg.fade_target_y),\
+            float(self.alg.fade_target_z),\
+            float(self.alg.mode_fade_increment),\
+            float(self.alg.vs_target_x),\
+            float(self.alg.vs_target_y),\
+            float(self.alg.vs_target_z))
 
         if header is None:
             return printstr
