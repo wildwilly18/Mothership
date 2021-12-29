@@ -8,7 +8,7 @@ import time
 
 def main():
 
-    vid = cv2.VideoCapture(0)
+    vid = cv2.VideoCapture(-1)
 
     cnt = Controller()
 
