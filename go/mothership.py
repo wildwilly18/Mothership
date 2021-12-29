@@ -20,8 +20,6 @@ from scipy.spatial.transform import Rotation as R
 from mavros_msgs.msg import *
 from mavros_msgs.srv import *
 
-#Gazebo messasges
-from gazebo_msgs.srv import GetModelState
 
 class fcuModes:
     def __init__(self):

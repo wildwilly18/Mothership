@@ -16,9 +16,6 @@ def main():
     # controller object
     cnt = Controller()
 
-    # Mothership object to track
-    mShip = Mothership()
-
     # ROS loop rate
     rate = rospy.Rate(20.0)
 
@@ -67,8 +64,6 @@ def main():
     ii = 0
 
     while not rospy.is_shutdown():
-        #Start by grabbing the Motherships position
-        mShip.get_sim_location()
         #In the loop want to have the drone follow behind the block 1m and below 1m inline on Y
         x_cmd = 0
         y_cmd = 0
