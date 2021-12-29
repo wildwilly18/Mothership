@@ -147,8 +147,16 @@ class Controller:
             #Image Algorithm info
             self.ARUCO_DICT    = cv2.aruco.Dictionary_get(cv2.aruco.DICT_6X6_100) #Initialize the Aruco Dictionary that the controller will use.
             self.ARUCO_PARAMS  = cv2.aruco.DetectorParameters_create()
-            self.camera_matrix = np.array([[277.191356, 0, 159.5],[0, 277.191356, 119.5], [0, 0, 1]]) #Camera matrix for simulated camera. From fpv_cam.sdf
-            self.camera_dist   = np.array([0, 0, 0, 0]) #Distortion Coefficients for the simlated camera. set to 0 in sim. From fpv_cam.sdf
+            #Camera intrinsic paramaters determined from matlab camera calibration...
+            fx = 5.522067755300895e+02
+            fy = 7.449299628154979e+02
+            cx = 3.479833806300082e+02
+            cy = 2.925025107082283e+02
+            k1 = -0.425968726364035
+            k2 =  0.176325076893194
+            
+            self.camera_matrix = np.array([[fx, 0, cx],[0, fy, cy], [0, 0, 1]]) #Camera matrix for simulated camera. From fpv_cam.sdf
+            self.camera_dist   = np.array([k1, k2, 0, 0]) #Distortion Coefficients for the simlated camera. set to 0 in sim. From fpv_cam.sdf
             self.img           = None
 
             #Localizing Algorithm info
@@ -466,44 +474,12 @@ class Controller:
 
         return Local_pts                    
 
-    def imgCallback(self, img):
-        np_arr = np.fromstring(img.data, np.uint8)
-        image_np = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
-
+    def imgCap(self, img):
         #Convert image to grey
-        grey_im = cv2.cvtColor(image_np, cv2.COLOR_BGR2GRAY)
+        grey_im = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
         #Save this image in our object
         self.alg.img = grey_im
-
-        #print image for viewing purposes
-        cv2.imshow('cv_img', grey_im)                    
-        cv2.waitKey(2)
-
-    def locateArucoID(self, img, id):
-        np_arr = np.fromstring(img.data, np.uint8)
-        image_np = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
-
-        #Convert image to grey
-        grey_im  = cv2.cvtColor(image_np, cv2.COLOR_BGR2GRAY)
-        (corners, ids, rejected) = cv2.aruco.detectMarkers(grey_im, self.alg.ARUCO_DICT, parameters=self.alg.ARUCO_PARAMS)
-
-        if ids is not None:
-            for id in ids:
-                #Set the length of the ID detected.
-                if(id[0] == 10):
-                    #Get the rotation vec and translation vec of the camera to the aruco I believe. can use this to control the quad.
-                    rvecs, tvecs = cv2.aruco.estimatePoseSingleMarkers(corners[cnt], aruco_len, self.alg.camera_matrix, self.alg.camera_dist)
-
-        #Printing for debug purposes
-        loc_string = str('yaw: ') + str(rvecs[0][0][2]) + str(' z-dist: ') + str(tvecs[0][0][2])
-        #print loc_string
-        cnt = cnt + 1
-        err = [rvecs[0][0][2], tvecs[0][0][2]]
-        
-        return err
-        cv2.imshow('cv_img', grey_im)
-        cv2.waitKey(2)
 
     def locateAruco(self, img):
         np_arr = np.fromstring(img.data, np.uint8)
