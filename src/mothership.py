@@ -6,15 +6,13 @@ import cv2
 import math
 import numpy as np
 import time
-import tf.transformations
 
 # 3D point & Stamped Pose msgs
-from geometry_msgs.msg       import Point, PoseStamped, Twist
-from sensor_msgs.msg         import NavSatFix, Imu
-from std_msgs.msg            import Float64
-from cv_bridge               import CvBridge
-from sensor_msgs.msg         import CompressedImage
-from scipy.spatial.transform import Rotation as R
+from geometry_msgs.msg import Point, PoseStamped, Twist
+from sensor_msgs.msg   import NavSatFix
+from std_msgs.msg      import Float64
+from cv_bridge         import CvBridge
+from sensor_msgs.msg   import CompressedImage
 
 # import all mavros messages and services
 from mavros_msgs.msg import *
@@ -100,7 +98,7 @@ class Controller:
         self.sp = PositionTarget()
 
         # set the flag to use position setpoints and yaw angle
-        #self.sp.type_mask = int('010111111000', 2)
+        self.sp.type_mask = int('010111111000', 2)
         # LOCAL_NED
         self.sp.coordinate_frame = 1
 
@@ -126,16 +124,10 @@ class Controller:
         # A Message for the current local position of the drone
         self.local_pos = Point(0.0, 0.0, 1.0)
 
-        self.yaw   = 0
-        self.pitch = 0
-        self.roll  = 0
-
-
         # initial values for setpoints
         self.sp.position.x = 0.0
         self.sp.position.y = 0.0
-        self.sp.yaw        = 0
-        self.sp.yaw_rate   = 0
+        self.sp.yaw        = 4.0
 
         #initiate a Mothership
         self.mShip = self.Mothership()
@@ -149,7 +141,9 @@ class Controller:
             #Image Algorithm info
             self.ARUCO_DICT    = cv2.aruco.Dictionary_get(cv2.aruco.DICT_6X6_100) #Initialize the Aruco Dictionary that the controller will use.
             self.ARUCO_PARAMS  = cv2.aruco.DetectorParameters_create()
-            self.camera_matrix = np.array([[277.191356, 0, 159.5],[0, 277.191356, 119.5], [0, 0, 1]]) #Camera matrix for simulated camera. From fpv_cam.sdf
+            self.id_list       = [10]      #List of Aruco tags to use for localization. 
+            self.id_loc_list   = [[-1000,-1000,-1000]] #Location of Aruco tags. Init to -1000 as an extraneous value.
+            self.camera_matrix = np.array([[277.191356, 0, 320.5],[0, 277.191356, 240.5], [0, 0, 1]]) #Camera matrix for simulated camera. From fpv_cam.sdf
             self.camera_dist   = np.array([0, 0, 0, 0]) #Distortion Coefficients for the simlated camera. set to 0 in sim. From fpv_cam.sdf
             self.img           = None
 
@@ -160,50 +154,27 @@ class Controller:
             self.vis_last               =    0 #Keep track if last check aruco was found.
             self.vis_consecutive        =    0 #Track consecutive vis found or not found for algorithm, weights single misses vs multiple frames of misses
             self.vis_counter_max_min    = 1000 #Saturation value for the visual counter
-            self.vis_P                  =  0.3 #Proportional gain for our Visual Controller, may need independant X and Y
-            self.vis_I                  = 0.08 #Integrator gain for our Visual Controller, may need independant X and Y 
-            self.vis_err_x_prev         =    0 #Previous x err
-            self.vis_err_y_prev         =    0 #Previous y err
-            self.vis_int_x              =    0 #Stored X integrator
-            self.vis_int_y              =    0 #Stored Y integrator
-            self.vis_int_max            =   50 #Maximum integrator value 
 
             #Rendesvouz algorithm trackers
-            self.rendesvous_mode      =      0    #Set the rendesvous mode on startup. 
-            self.algo_counter         =      0    #Here tracks count of each frame where position error from A is < specified value for all dirs
-            self.algo_last            =      0    #Track if previous frame aircraft was in the range
-            self.algo_consecutive     =      0    #Track consecutive frames of within error range
-            self.algo_counter_sat     =   1000    #Saturation value for position
-            self.algorithm_threshold  =    750    #Value for algorithm thresholds
-            self.mothership_vel       =      0    #Needed for calculating target for the quad
-            self.mothership_heading   =      0    #Heading of mothership
-            self.pitch_2_match_vel    =      0    #Pitch required by quad to match mship vel
-            self.rendesvouz_int       =      0    #Integrate the error for Rendesvouz command point. 
+            self.rendesvous_mode      =    0 #Set the rendesvous mode on startup. 
+            self.algo_counter         =    0 #Here tracks count of each frame where position error from A is < specified value for all dirs
+            self.algo_last            =    0 #Track if previous frame aircraft was in the range
+            self.algo_consecutive     =    0 #Track consecutive frames of within error range
+            self.algo_counter_sat     = 1000 #Saturation value for position
+            self.algorithm_threshold  =  750 #Value for algorithm thresholds
+            self.mothership_vel       = 0    #Needed for calculating target for the quad
+            self.mothership_heading   = 0    #Heading of mothership
+            self.pitch_2_match_vel    = 0    #Pitch required by quad to match mship vel
+            self.rendesvouz_int       = 0    #Integrate the error for Rendesvouz command point. 
             self.rendesvouz_int_gain  = 0.0005  #Gain for the rendesvouz integrator error.
-            self.error_vec_last       =      0    #Error from previous for integrator
-            self.x_error_int          =      0    #x integrator value
-            self.y_error_int          =      0    #y integrator value
-            self.rendesvouz_dist      =      2    #distance in M that the rendesvouz point will be
-            self.quad_radius          =    0.1    #Uncertainty sphere radius of the quadrotor
-
-
-            #Visual Approach Mode trackers
-            self.vis_app_dist = self.rendesvouz_dist #Initialize our start with where we rendesvouz too
-            self.vis_app_counter           =       0    #Counter to track that we are inside the allowed
-            self.vis_app_last              =       0    
-            self.vis_app_consecutive       =       0
-            self.vis_app_threshold         =     750 #Threshold to turn on or off distance subtraction.
-            self.vis_app_counter_min_max   =    1000
-            self.vis_app_dist_sub_rate     =   .0001 #Shows how many meters will be removed per frame. runs @~100Hz. this is ~1mm per second. about 1 minute to go 1m
-            self.quad_safe                 =   False    #Stor if the quad is in the safe zone for visual servo
-            self.x_vis_err                 =       0
-            self.y_vis_err                 =       0 
-            self.z_vis_err                 =       0
+            self.error_vec_last       = 0    #Error from previous for integrator
+            self.x_error_int          = 0    #x integrator value
+            self.y_error_int          = 0    #y integrator value
 
             #Rendeszous target, 2m distance from the ship. Position behind and below to match quads estimated pitch for speed.
-            self.rs_target_x = -self.rendesvouz_dist * math.cos(self.pitch_2_match_vel)
+            self.rs_target_x = -2 * math.cos(self.pitch_2_match_vel)
             self.rs_target_y =  0
-            self.rs_target_z =  self.rendesvouz_dist * math.sin(self.pitch_2_match_vel)
+            self.rs_target_z =  2 * math.sin(self.pitch_2_match_vel)
 
             self.rs_target_x_clean = self.rs_target_x
             self.rs_target_y_clean = self.rs_target_y
@@ -211,9 +182,9 @@ class Controller:
             
             #Visual Servo X, Y & Z positions, start at 2 m dist off the mship. Is a func of mship speed and pithc
             #Below assumption is moving in x dir only
-            self.vs_target_x = -self.rendesvouz_dist * math.cos(self.pitch_2_match_vel)
+            self.vs_target_x = -2 * math.cos(self.pitch_2_match_vel)
             self.vs_target_y =  0 #eventually will 
-            self.vs_target_z =  self.rendesvouz_dist * math.sin(self.pitch_2_match_vel)
+            self.vs_target_z =  2 * math.sin(self.pitch_2_match_vel)
     #Class to get the information from the Mothership in the sim.
 
     class Mothership:
@@ -247,31 +218,14 @@ class Controller:
             self.x = mShip_coordinates.pose.position.x
             self.y = mShip_coordinates.pose.position.y
             self.z = mShip_coordinates.pose.position.z
+
 	# Callbacks
     ## local position callback
-    def orientation(self, msg):
-        orientation_q = msg.orientation
-
-        #print orientation_q
-    
-        angles = tf.transformations.euler_from_quaternion([orientation_q.x, orientation_q.y, orientation_q.z, orientation_q.w])
-        #print angles
-
     def posCb(self, msg):
         self.local_pos.x = msg.pose.position.x
         self.local_pos.y = msg.pose.position.y
         self.local_pos.z = msg.pose.position.z
 
-        #Get Quart and convert to Euler
-        orientation_q = msg.pose.orientation
-        angles = tf.transformations.euler_from_quaternion([orientation_q.x, orientation_q.y, orientation_q.z, orientation_q.w])
-
-        #print angles
-        self.roll  = angles[0]
-        self.pitch = angles[1]
-        self.yaw   = angles[2]
-
-        #print str('yaw: ' + str(self.yaw * 180 / 3.14) + ' pitch: ' + str(self.pitch * 180 / 3.14)+ ' roll: ' + str(self.roll * 180 / 3.14))
     ## Drone State callback
     def stateCb(self, msg):
         self.state = msg
@@ -281,16 +235,19 @@ class Controller:
         self.heading = msg.data
 
     ## Update setpoint message
-    def updateSp(self, x_des, y_des, z_des, yaw=0):
+    def updateSp(self, x_des, y_des, z_des):
         self.sp.position.x = x_des
         self.sp.position.y = y_des
         self.sp.position.z = z_des
-        self.sp.yaw        = yaw
+        self.sp.yaw        = 2.0
 
     def globalLoc(self, msg):
         self.sp_glob.latitude  = msg.latitude
         self.sp_glob.longitude = msg.longitude
         self.sp_glob.altitude  = msg.altitude
+
+    def getTargetA(self, lat_target, lon_target, alt_target):
+        self.A_lat = 0
 
     def updateRendesvousLoc(self):
         self.mShip.get_sim_location()
@@ -301,7 +258,7 @@ class Controller:
 
         #Check error and integrate it.
         #x y plane error
-        error_vec = math.sqrt(((self.local_pos.x - self.alg.rs_target_x_clean) ** 2) + ((self.local_pos.y - self.alg.rs_target_y_clean) ** 2))
+        error_vec = math.sqrt(((self.local_pos.x - self.alg.rs_target_x_clean) * (self.local_pos.x - self.alg.rs_target_x_clean)) + ((self.local_pos.y - self.alg.rs_target_y_clean) * (self.local_pos.y - self.alg.rs_target_y_clean)))
         if (self.local_pos.x > self.alg.rs_target_x_clean):
             error_dir = -1
         else:
@@ -325,79 +282,6 @@ class Controller:
         self.alg.rs_target_y = self.mShip.y  #Eventually will be including heading 
         self.alg.rs_target_z = self.mShip.z - (2 * math.cos(self.alg.pitch_2_match_vel))        
 
-    def updateVisErr(self, cam2aruco):
-        d = self.alg.vis_app_dist
-        
-        x_vis = cam2aruco[0]
-        y_vis = cam2aruco[1]
-        z_vis = cam2aruco[2]
-
-        #Calculate x y z error of the quad relative to the target.
-        self.alg.x_vis_err = (d * math.sin(self.alg.pitch_2_match_vel)) + x_vis #Eventually will add heading
-        self.alg.y_vis_err = (0) + y_vis#Eventually will be heading 
-        self.alg.z_vis_err = (d * math.cos(self.alg.pitch_2_match_vel)) - z_vis
-
-        #print str('x_vis_err:' + str(self.alg.x_vis_err))
-
-    def checkVisAppInRadius(self):
-        #Calculate (x,y,z) location of vis guidance center
-        d = self.alg.vis_app_dist
-        quad_rad = self.alg.quad_radius
-
-        #Calculate the safe zone radius
-        safe_radius = 0.5 * (d**2 / self.alg.rendesvouz_dist)  #R = 0.5* (d^2 / d_not)
-
-        #If close to quad use other portion of the system of equations.
-        if(safe_radius < (2 * quad_rad)):
-            safe_radius = 2 * quad_rad
-
-        err_mag = math.sqrt((self.alg.x_vis_err ** 2) + (self.alg.y_vis_err ** 2) + (self.alg.z_vis_err ** 2))
-
-        #print str("Error Mag: " + str(err_mag) + " safe_radius: " + str(safe_radius))
-
-        if(err_mag + quad_rad < safe_radius):
-            self.alg.quad_safe = True
-        else:
-            self.alg.quad_safe = False
-
-    def updateVisualDist(self):
-        #Function here will store the confidence of the quads position in approach. It will also calculate D to move the quad closer to the target
-        if(self.alg.quad_safe):
-            if self.alg.vis_app_last is 1:
-                #If isn't saturated add to counter. If saturated Pass
-                if (self.alg.vis_app_counter < self.alg.vis_app_counter_min_max):
-                    self.alg.vis_app_counter     = self.alg.vis_app_counter + (1 * self.alg.vis_app_consecutive)
-                    self.alg.vis_app_consecutive = self.alg.vis_app_consecutive + 1
-
-                    #Check if it becomes saturated
-                    if (self.alg.vis_app_counter > self.alg.vis_app_counter_min_max):
-                        self.alg.vis_app_counter = self.alg.vis_app_counter_min_max
-                else:
-                    pass
-
-            else:
-                self.alg.vis_app_counter     = self.alg.vis_app_counter + 1
-                self.alg.vis_app_consecutive = 1
-                self.alg.vis_app_last        = 1
-
-        else:
-            if self.alg.vis_app_last is 0:
-                if(self.alg.vis_app_counter > -self.alg.vis_app_counter_min_max):
-                    self.alg.vis_app_counter     = self.alg.vis_app_counter - (1 * self.alg.vis_app_consecutive)
-                    self.alg.vis_app_consecutive = self.alg.vis_app_consecutive + 1
-
-                    if(self.alg.vis_app_counter < -self.alg.vis_app_counter_min_max):
-                        self.alg.vis_app_counter = -self.alg.vis_app_counter_min_max
-                else:
-                    pass
-            else:
-                self.alg.vis_app_counter     = self.alg.vis_app_counter - 1
-                self.alg.vis_app_consecutive = 1
-                self.alg.vis_app_last        = 0
-
-        if(self.alg.vis_app_counter > self.alg.vis_app_threshold):
-            self.alg.vis_app_dist = self.alg.vis_app_dist - self.alg.vis_app_dist_sub_rate #Calculate here the distance of the quad to target
-
     def updateVisLoc(self, img):
         self.mShip.get_sim_location()
 
@@ -405,74 +289,21 @@ class Controller:
 
         if ids is not None:
             for id in ids:
-                
                 #Set the length of the ID detected.
                 if(id[0] == 10):
                     aruco_len = 0.1
                     #Get the rotation vec and translation vec of the camera to the aruco I believe. can use this to control the quad.
                     rvecs, tvecs = cv2.aruco.estimatePoseSingleMarkers(corners[0], aruco_len, self.alg.camera_matrix, self.alg.camera_dist)
-
-                    cam_pts = np.array([[-tvecs[0][0][1]], 
-                                         [tvecs[0][0][0]],
-                                         [tvecs[0][0][2]],
-                                        [1]])
-
-                    cam2aruco = self.cam2Local(cam_pts)
-
-                    #Using camera 2 aruco points update the Visual Error
-                    self.updateVisErr(cam2aruco)
-
-                    #Using the calculated Visual Error check if the quadrotor is in the safe radius
-                    self.checkVisAppInRadius()
-
-                    #Depending of the satus of the quadrotor and the safe radius update the visual distance algorithm
-                    self.updateVisualDist()
-
-                    #Calculate integrator value
-                    self.alg.vis_int_x = 0.5 * (self.alg.x_vis_err + self.alg.vis_err_x_prev)
-                    self.alg.vis_int_y = 0.5 * (self.alg.y_vis_err + self.alg.vis_err_y_prev)
-
-                    #Check max integrator values
-                    if(self.alg.vis_int_x > self.alg.vis_int_max):
-                        self.alg.vis_int_x = self.alg.vis_int_max
-                    elif(self.alg.vis_int_x < -self.alg.vis_int_max):
-                        self.alg.vis_int_x = -self.alg.vis_int_max
-
-                    if(self.alg.vis_int_y > self.alg.vis_int_max):
-                        self.alg.vis_int_y = self.alg.vis_int_max
-                    elif(self.alg.vis_int_y < -self.alg.vis_int_max):
-                        self.alg.vis_int_y = -self.alg.vis_int_max
-
-                    #After calculating integrator 
-                    self.alg.vis_err_x_prev = self.alg.x_vis_err
-                    self.alg.vis_err_y_prev = self.alg.y_vis_err
-
                     #Simplify here. Going directly below. Will need to figure out how to calc err from a spot.
-                    self.alg.vs_target_x = self.local_pos.x - (self.alg.x_vis_err * self.alg.vis_P) - (self.alg.vis_int_x * self.alg.vis_I)
-                    self.alg.vs_target_y = self.local_pos.y - (self.alg.y_vis_err * self.alg.vis_P) - (self.alg.vis_int_y * self.alg.vis_I)
-                    self.alg.vs_target_z = self.local_pos.z - self.alg.z_vis_err
+                    self.alg.vs_target_x = self.mShip.x - (tvecs[0][0][0] * 0.1)
+                    self.alg.vs_target_y = self.mShip.y - (tvecs[0][0][1] * 0.1)
+                    self.alg.vs_target_z = self.mShip.z - (tvecs[0][0][2] * 0.1) - 1
+                    print 'in Vis'
 
-                    #print str("X Loc:" + str(self.local_pos.x) + " X Err:" + str(self.alg.x_vis_err))
-                    print str("Z Loc:" + str(self.local_pos.z) + " Z Err:" + str(self.alg.z_vis_err) + " D: " + str(self.alg.vis_app_dist))
-
-    def cam2Local(self, cam_pts):
-        #Here in the function build the Rot matrix of the quadcopter, take XYZ points from camera, [y x z 1] format. Rot_Mat * Cam_Pts will give Aruco wrld pts
-        
-
-        roll  = self.roll
-        pitch = self.pitch
-        yaw   = self.yaw 
-
-        #print str("Pitch: " + str(pitch) + " Roll: " + str(roll) + " Yaw: " + str(yaw))
-        rot_mat = np.array([[math.cos(roll)*math.cos(pitch),   (math.cos(roll)*math.sin(pitch)*math.sin(yaw))-(math.sin(roll)*math.cos(yaw)), math.cos(roll)*math.sin(pitch)*math.cos(yaw)+math.sin(roll)*math.sin(yaw), 0],
-                            [math.sin(roll)*math.cos(pitch),  (math.sin(roll)*math.sin(pitch)*math.sin(yaw))+(math.cos(pitch)*math.cos(yaw)), math.sin(roll)*math.sin(pitch)*math.cos(yaw)-math.cos(roll)*math.sin(yaw), 0],
-                            [              -math.sin(pitch),                                                   math.cos(pitch)*math.sin(yaw),                                             math.cos(pitch)*math.cos(yaw), 0],
-                            [                             0,                                                                               0,                                                                         0, 1]])
-        
-        Local_pts = np.matmul(rot_mat, cam_pts)
-
-        return Local_pts                    
-
+                    #print str(" Location: X: " + str(self.mShip.x)+ " Y: " + str(self.mShip.y) + " Z: " +str(self.mShip.z))
+                    #print str("Aruco Loc: X: " + str(tvecs[0][0][0])+ " Y: " + str(tvecs[0][0][1]) + " Z: " +str(tvecs[0][0][2]))
+                    #print str("  Des Loc: X: " + str(self.alg.vs_target_x)+ " Y: " + str(self.alg.vs_target_y) + " Z: " +str(self.alg.vs_target_z))
+                    
     def imgCallback(self, img):
         np_arr = np.fromstring(img.data, np.uint8)
         image_np = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
@@ -482,10 +313,6 @@ class Controller:
 
         #Save this image in our object
         self.alg.img = grey_im
-
-        #print image for viewing purposes
-        cv2.imshow('cv_img', grey_im)                    
-        cv2.waitKey(2)
 
     def locateArucoID(self, img, id):
         np_arr = np.fromstring(img.data, np.uint8)
@@ -548,20 +375,8 @@ class Controller:
         y_err = abs(self.local_pos.y - self.alg.rs_target_y)
         z_err = abs(self.local_pos.z - self.alg.rs_target_z)
 
-        #Error allowed will be the sphere of the quad inside an allowable error sphere that is a function of the rendesvouz distance.
-        erro_Radius = 0.5 * self.alg.rendesvouz_dist #This value is the error sphere.
-
-        # Check if the quad is within error sphere
-        err_dist = (math.sqrt((x_err**2)+(y_err**2)+(z_err**2)))
-
-        if(err_dist+self.alg.quad_radius < erro_Radius):
-            inside_sphere = True
-
-        else:
-            inside_sphere = False
-
         #print str( "X err: " + str(x_err) + " Y err: " + str(y_err) + " Z err: " + str(z_err))
-        if(inside_sphere):
+        if(x_err < 0.7 and y_err < 0.7 and z_err < 0.7):
             if self.alg.algo_last is 1:
                 #If isn't saturated add to counter. If saturated Pass
                 if (self.alg.algo_counter < self.alg.algo_counter_sat):
@@ -671,7 +486,6 @@ class Controller:
             self.alg.visual_mode            = 0
             self.alg.visual_first_encounter = 0
             self.alg.vis_counter            = 0
-            self.alg.vis_app_dist           = self.alg.rendesvouz_dist
     
     def logData(self, header=None):
         elapsed_time = time.clock()
