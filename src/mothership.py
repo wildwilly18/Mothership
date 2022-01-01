@@ -7,6 +7,7 @@ import math
 import numpy as np
 import time
 import tf.transformations
+import pymap3d as pm
 
 # 3D point & Stamped Pose msgs
 from geometry_msgs.msg       import Point, PoseStamped, Twist
@@ -20,7 +21,7 @@ from scipy.spatial.transform import Rotation as R
 from mavros_msgs.msg import *
 from mavros_msgs.srv import *
 
-#Gazebo messasges
+#Gazebo messasges Remove for real world app
 from gazebo_msgs.srv import GetModelState
 
 class fcuModes:
@@ -130,12 +131,15 @@ class Controller:
         self.pitch = 0
         self.roll  = 0
 
-
         # initial values for setpoints
         self.sp.position.x = 0.0
         self.sp.position.y = 0.0
         self.sp.yaw        = 0
         self.sp.yaw_rate   = 0
+
+        self.lat0 = 0
+        self.lon0 = 0
+        self.alt0 = 0
 
         #initiate a Mothership
         self.mShip = self.Mothership()
@@ -163,7 +167,7 @@ class Controller:
             self.vis_P                  =   0.7 #Proportional gain for our Visual Controller, may need independant X and Y
             self.vis_I                  =   0.002 #Integrator gain for our Visual Controller, may need independant X and Y
             self.vis_D                  =   0.008 #Derivative gain for our Visual Controller
-            self.vis_ff                 =   1.0 #Gain for the feed forward value.
+            self.vis_ff                 =   0.2 #Gain for the feed forward value.
             self.vis_err_x_prev         =   0.0 #Previous x err
             self.vis_err_y_prev         =   0.0 #Previous y err
             self.vis_err_z_prev         =   0.0 #Previous z err
@@ -182,7 +186,7 @@ class Controller:
             self.algo_consecutive     =      0    #Track consecutive frames of within error range
             self.algo_counter_sat     =   1000    #Saturation value for position
             self.algorithm_threshold  =    750    #Value for algorithm thresholds
-            self.mothership_vel       =      0    #Needed for calculating target for the quad
+            self.mothership_vel       =      5    #Needed for calculating target for the quad
             self.mothership_heading   =      0    #Heading of mothership
             self.pitch_2_match_vel    =      0    #Pitch required by quad to match mship vel
             self.rendesvouz_int       =      0    #Integrate the error for Rendesvouz command point. 
@@ -195,6 +199,9 @@ class Controller:
             self.safe_radius          =    1.2    #Store the safe radius that is calculated for the visual algorithm
             self.err_mag              =    0.0    #Err mag calculated for the visual algorithm
             self.rendesvouz_int_max   =   4000
+
+            #Rendesvouz feed forward gain
+            self.rendesvouz_ff_gain   =    0.5   #Gain for the feed forward to help push the drone into the right spot. Mult by mship speed   
 
             #Previous Set Point Value for storage
             self.x_setpoint_prev      =    0.0
@@ -235,28 +242,42 @@ class Controller:
             self.fade_target_x = 0.0
             self.fade_target_y = 0.0
             self.fade_target_z = 0.0 
+
+
     #Class to get the information from the Mothership in the sim.
 
     class Mothership:
         def __init__(self):
+            #Code for the sim to get the mothership xyz location... 
             model_coordinates = rospy.ServiceProxy('/gazebo/get_model_state', GetModelState)
             mShip_coordinates = model_coordinates("mothership", "")
 
-            self.x = mShip_coordinates.pose.position.x
-            self.y = mShip_coordinates.pose.position.y
-            self.z = mShip_coordinates.pose.position.z
+            #Initialize xyz to zero. Will update
+            self.lat = 0
+            self.lon = 0
+            self.alt = 0
+            self.x = 0
+            self.y = 0
+            self.z = 0
 
             print str( str('Mothership found at, X: ') + str(self.x)+ str(' Y: ') + str(self.y)+ str(' Z: ') + str(self.z))
 
-        def get_sim_location(self):
+        def get_sim_location(self,lat0,lon0,alt0):
             #Just get the values from the ros connection to get the model state to use
             model_coordinates = rospy.ServiceProxy('/gazebo/get_model_state', GetModelState)
             mShip_coordinates = model_coordinates("mothership", "")
 
             #Update the locations to the Mothership object
-            self.x = mShip_coordinates.pose.position.x
-            self.y = mShip_coordinates.pose.position.y
-            self.z = mShip_coordinates.pose.position.z
+            x = mShip_coordinates.pose.position.x
+            y = mShip_coordinates.pose.position.y
+            z = mShip_coordinates.pose.position.z
+
+            #ROS Coordinate frame is East(X) North(Y) Up(Z)
+            #This line is to sim what we would be given via UTM_GLOBAL_POSITION
+            (self.lat, self.lon, self.alt) = pm.enu2geodetic(x,y,z,lat0,lon0,alt0)
+
+            #Now convert lat lon alt to xyz
+            (self.x, self.y, self.z) = pm.geodetic2enu(self.lat, self.lon, self.alt, lat0, lon0, alt0)
 
         def get_sim_world_location(self):
             #This function will need to be updated to transfer from sim location to World Location
@@ -297,6 +318,11 @@ class Controller:
     def stateCb(self, msg):
         self.state = msg
 
+    def initLatLon(self):
+        #Upon startup of controller set the initial latlon to be used to get xyz of mothership in future.
+        (self.lat0, self.lon0, self.alt0) = pm.enu2geodetic(self.local_pos.x, self.local_pos.y, self.local_pos.z, self.sp_glob.latitude, self.sp_glob.longitude, self.sp_glob.altitude)
+
+        print 'Drone Initialized at Lat:' + str(self.lat0) +' Lon:' + str(self.lon0) + ' Alt:' + str(self.alt0)
     # Drone heading
     def updateHDG(self, msg):
         self.heading = msg.data
@@ -314,9 +340,9 @@ class Controller:
         self.sp_glob.altitude  = msg.altitude
 
     def updateRendesvousLoc(self):
-        self.mShip.get_sim_location()
+        self.mShip.get_sim_location(self.lat0, self.lon0, self.alt0)
 
-        self.alg.rs_target_x_clean = self.mShip.x + (2 * math.sin(0)) + 2.5#Eventually will be heading
+        self.alg.rs_target_x_clean = self.mShip.x + (2 * math.sin(0))# + (self.alg.rendesvouz_ff_gain * self.alg.mothership_vel)#Eventually will be heading
         self.alg.rs_target_y_clean = self.mShip.y + (0) #Eventually will be heading 
         self.alg.rs_target_z_clean = self.mShip.z - (2 * math.cos(self.alg.pitch_2_match_vel))
 
@@ -358,7 +384,7 @@ class Controller:
 
         #Add integrator to target.
         #print x_error_int
-        self.alg.rs_target_x = self.mShip.x +  0.1 * error_vec + self.alg.x_error_int + 2.5#Eventually will be including heading
+        self.alg.rs_target_x = self.mShip.x +  0.1 * error_vec + self.alg.x_error_int #+ (self.alg.rendesvouz_ff_gain * self.alg.mothership_vel)#Eventually will be including heading
         self.alg.rs_target_y = self.mShip.y  #Eventually will be including heading 
         self.alg.rs_target_z = self.mShip.z - (2 * math.cos(self.alg.pitch_2_match_vel))        
 
@@ -440,7 +466,7 @@ class Controller:
                 self.alg.vis_app_dist = self.alg.vis_target_dist #Stop at the target distance. So we aren't kicked out of the visual algorithm
 
     def updateVisLoc(self, img):
-        self.mShip.get_sim_location()
+        self.mShip.get_sim_location(self.lat0, self.lon0, self.alt0)
 
         (corners, ids, rejected) = cv2.aruco.detectMarkers(img, self.alg.ARUCO_DICT, parameters=self.alg.ARUCO_PARAMS)
 
@@ -505,7 +531,7 @@ class Controller:
                     self.alg.vis_err_z_prev = self.alg.z_vis_err
 
                     #Simplify here. Going directly below. Will need to figure out how to calc err from a spot.
-                    self.alg.vs_target_x = self.local_pos.x - (self.alg.x_vis_err * self.alg.vis_P) - (self.alg.vis_int_x * self.alg.vis_I) - (self.alg.vis_der_x * self.alg.vis_D) + (self.alg.alg_feedforward * self.alg.vis_ff)
+                    self.alg.vs_target_x = self.local_pos.x - (self.alg.x_vis_err * self.alg.vis_P) - (self.alg.vis_int_x * self.alg.vis_I) - (self.alg.vis_der_x * self.alg.vis_D) + (self.alg.alg_feedforward * self.alg.vis_ff * self.alg.mothership_vel)
                     self.alg.vs_target_y = self.local_pos.y - (self.alg.y_vis_err * self.alg.vis_P) - (self.alg.vis_int_y * self.alg.vis_I) - (self.alg.vis_der_y * self.alg.vis_D)
                     self.alg.vs_target_z = self.local_pos.z - (self.alg.z_vis_err * self.alg.vis_P) - (self.alg.vis_int_z * self.alg.vis_I)
 
