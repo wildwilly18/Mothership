@@ -55,6 +55,10 @@ def main():
     # Setpoint publisher    
     sp_pub = rospy.Publisher('mavros/setpoint_raw/local', PositionTarget, queue_size=1)
 
+    # Before arming initialize lat0 lon0 and alt0
+    print 'Initializing Lat Lon'
+    cnt.initLatLon()
+    
     print 'Pub Sub setup. Trying to arm'
     # Make sure the drone is armed
     while not cnt.state.armed:
@@ -104,7 +108,26 @@ def main():
         
         #If object can enter visual mode it will enter this loop. This loop only uses visual for confidence.
         while cnt.alg.visual_mode:
-            
+                
+            #After deeming we can enter visual mode begin to fade from Rendesvouz to Visual Mode
+            while cnt.alg.mode_fade_increment < 1.0:
+                cnt.updateRendesvousLoc()
+                cnt.updateVisLoc(cnt.alg.img)
+                
+                cnt.fadeToVisLoc()
+
+                #update SP with fade SP
+                cnt.updateSp(cnt.alg.fade_target_x, cnt.alg.fade_target_y, cnt.alg.fade_target_z)
+
+                #Publish the setpoint to the quad.
+                sp_pub.publish(cnt.sp)
+
+                loggedData = cnt.logData()
+                #print loggedData
+                logFile.writelines(loggedData)
+                print 'Fade Val:' + str(cnt.alg.mode_fade_increment)
+                cnt.alg.mode_fade_increment = cnt.alg.mode_fade_increment + 0.0001
+
             loggedData = cnt.logData()
             #print loggedData
             logFile.writelines(loggedData)
