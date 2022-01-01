@@ -161,8 +161,8 @@ class Controller:
             self.vis_consecutive        =     0 #Track consecutive vis found or not found for algorithm, weights single misses vs multiple frames of misses
             self.vis_counter_max_min    =  1000 #Saturation value for the visual counter
             self.vis_P                  =   0.7 #Proportional gain for our Visual Controller, may need independant X and Y
-            self.vis_I                  =   0.000 #Integrator gain for our Visual Controller, may need independant X and Y
-            self.vis_D                  =   0.002 #Derivative gain for our Visual Controller
+            self.vis_I                  =   0.002 #Integrator gain for our Visual Controller, may need independant X and Y
+            self.vis_D                  =   0.008 #Derivative gain for our Visual Controller
             self.vis_ff                 =   1.0 #Gain for the feed forward value.
             self.vis_err_x_prev         =   0.0 #Previous x err
             self.vis_err_y_prev         =   0.0 #Previous y err
@@ -172,7 +172,7 @@ class Controller:
             self.vis_int_z              =   0.0 #Stored Z integrator
             self.vis_der_x              =   0.0 #Stored X derivative
             self.vis_der_y              =   0.0 #Stored Y derivative
-            self.vis_int_max            =  50.0 #Maximum integrator value to prevent windup
+            self.vis_int_max            = 150.0 #Maximum integrator value to prevent windup
             self.alg_feedforward        =   0.0 #Take the algorithm Integrator Value and add it to the vis alg
 
             #Rendesvouz algorithm trackers
@@ -186,7 +186,7 @@ class Controller:
             self.mothership_heading   =      0    #Heading of mothership
             self.pitch_2_match_vel    =      0    #Pitch required by quad to match mship vel
             self.rendesvouz_int       =      0    #Integrate the error for Rendesvouz command point. 
-            self.rendesvouz_int_gain  = 0.0005  #Gain for the rendesvouz integrator error.
+            self.rendesvouz_int_gain  =   0.0005  #Gain for the rendesvouz integrator error.
             self.error_vec_last       =    0.0    #Error from previous for integrator
             self.x_error_int          =    0.0    #x integrator value
             self.y_error_int          =    0.0    #y integrator value
@@ -194,6 +194,7 @@ class Controller:
             self.quad_radius          =    0.1    #Uncertainty sphere radius of the quadrotor
             self.safe_radius          =    1.2    #Store the safe radius that is calculated for the visual algorithm
             self.err_mag              =    0.0    #Err mag calculated for the visual algorithm
+            self.rendesvouz_int_max   =   4000
 
             #Previous Set Point Value for storage
             self.x_setpoint_prev      =    0.0
@@ -315,7 +316,7 @@ class Controller:
     def updateRendesvousLoc(self):
         self.mShip.get_sim_location()
 
-        self.alg.rs_target_x_clean = self.mShip.x + (2 * math.sin(0)) #Eventually will be heading
+        self.alg.rs_target_x_clean = self.mShip.x + (2 * math.sin(0)) + 2.5#Eventually will be heading
         self.alg.rs_target_y_clean = self.mShip.y + (0) #Eventually will be heading 
         self.alg.rs_target_z_clean = self.mShip.z - (2 * math.cos(self.alg.pitch_2_match_vel))
 
@@ -331,10 +332,23 @@ class Controller:
 
         #Integrate error
         rendesvouz_int = self.alg.rendesvouz_int + (0.5 * (error_vec + self.alg.error_vec_last))
+        #self.alg.rendesvouz_int = rendesvouz_int
+
         self.alg.rendesvouz_int = rendesvouz_int
+
+        if (self.alg.rendesvouz_int > self.alg.rendesvouz_int_max):
+            self.alg.rendesvouz_int = self.alg.rendesvouz_int_max
+        elif(self.alg.rendesvouz_int < -self.alg.rendesvouz_int_max):
+            self.alg.rendesvouz_int = -self.alg.rendesvouz_int_max
+
+        print str(self.alg.rendesvouz_int)
+        #if we have not encountered do not build any integrator.
+
 
         #Store error for last error
         self.alg.error_vec_last = error_vec
+
+        #print str(self.alg.rendesvouz_int)
 
         self.alg.x_error_int = self.alg.rendesvouz_int * math.cos(0) * self.alg.rendesvouz_int_gain
         y_error_int = error_vec * math.sin(0) * self.alg.rendesvouz_int_gain
@@ -344,7 +358,7 @@ class Controller:
 
         #Add integrator to target.
         #print x_error_int
-        self.alg.rs_target_x = self.mShip.x +  0.1 * error_vec + self.alg.x_error_int #Eventually will be including heading
+        self.alg.rs_target_x = self.mShip.x +  0.1 * error_vec + self.alg.x_error_int + 2.5#Eventually will be including heading
         self.alg.rs_target_y = self.mShip.y  #Eventually will be including heading 
         self.alg.rs_target_z = self.mShip.z - (2 * math.cos(self.alg.pitch_2_match_vel))        
 
@@ -464,6 +478,7 @@ class Controller:
                     self.alg.vis_int_y = self.alg.vis_int_y + frame_vis_int_y
                     self.alg.vis_int_z = self.alg.vis_int_z + frame_vis_int_z
 
+                    print str(self.alg.vis_int_x)
                     #Check max integrator values
                     if(self.alg.vis_int_x > self.alg.vis_int_max):
                         self.alg.vis_int_x = self.alg.vis_int_max
