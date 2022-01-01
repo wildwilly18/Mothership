@@ -406,7 +406,7 @@ class Controller:
 
         if ids is not None:
             for id in ids:
-                
+                print id
                 #Set the length of the ID detected.
                 if(id[0] == 10):
                     aruco_len = 0.1
