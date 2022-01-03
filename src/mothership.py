@@ -461,7 +461,7 @@ class Controller:
                 self.alg.vis_app_last        = 0
 
         if(self.alg.vis_app_counter > self.alg.vis_app_threshold):
-            self.alg.vis_app_dist = self.alg.vis_app_dist - self.alg.vis_app_dist_sub_rate #Calculate here the distance of the quad to target
+            self.alg.vis_app_dist = self.alg.vis_app_dist - (self.alg.vis_app_dist_sub_rate * self.alg.vis_app_dist * 4) #Calculate here the distance of the quad to target
             if(self.alg.vis_app_dist < self.alg.vis_target_dist):
                 self.alg.vis_app_dist = self.alg.vis_target_dist #Stop at the target distance. So we aren't kicked out of the visual algorithm
 
@@ -598,8 +598,6 @@ class Controller:
         err = [rvecs[0][0][2], tvecs[0][0][2]]
         
         return err
-        cv2.imshow('cv_img', grey_im)
-        cv2.waitKey(2)
 
     def locateAruco(self, img):
         np_arr = np.fromstring(img.data, np.uint8)

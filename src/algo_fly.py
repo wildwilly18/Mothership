@@ -126,7 +126,7 @@ def main():
                 #print loggedData
                 logFile.writelines(loggedData)
                 print 'Fade Val:' + str(cnt.alg.mode_fade_increment)
-                cnt.alg.mode_fade_increment = cnt.alg.mode_fade_increment + 0.0001
+                cnt.alg.mode_fade_increment = cnt.alg.mode_fade_increment + 0.001
 
             loggedData = cnt.logData()
             #print loggedData
