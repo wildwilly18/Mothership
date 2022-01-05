@@ -652,7 +652,7 @@ class Controller:
             if self.alg.algo_last is 1:
                 #If isn't saturated add to counter. If saturated Pass
                 if (self.alg.algo_counter < self.alg.algo_counter_sat):
-                    self.alg.algo_counter = self.alg.algo_counter + (1 * self.alg.algo_consecutive)
+                    self.alg.algo_counter = self.alg.algo_counter + (0.001 * self.alg.algo_consecutive**1.3)
                     self.alg.algo_consecutive = self.alg.algo_consecutive + 1
 
                     #Check if it becomes saturated
@@ -669,7 +669,7 @@ class Controller:
         else:
             if self.alg.algo_last is 0:
                 if(self.alg.algo_counter > -self.alg.algo_counter_sat):
-                    self.alg.algo_counter     = self.alg.algo_counter - (1 * self.alg.algo_consecutive)
+                    self.alg.algo_counter     = self.alg.algo_counter - (0.001 * self.alg.algo_consecutive**1.3)
                     self.alg.algo_consecutive = self.alg.algo_consecutive + 1
 
                     if(self.alg.algo_counter < -self.alg.algo_counter_sat):
