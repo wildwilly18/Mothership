@@ -110,6 +110,11 @@ class Controller:
         self.sp_glob.longitude = 0
         self.sp_glob.altitude  = 0
         self.sp_glob.yaw       = 0
+
+        #Placehold for mship pos
+        self.mship_lat = 0
+        self.mship_lon = 0
+        self.mship_alt = 0
         
         # We will fly at a fixed altitude for now
         # Altitude setpoint, [meters]
@@ -225,6 +230,9 @@ class Controller:
     class Mothership:
         def __init__(self):
             #Real implementation will need to be a bit different. Need to get the location Lat, Lon, Alt via mavlink msg I believe from QGroundControl
+            self.lat = 0
+            self.lon = 0
+            self.alt = 0
 
             self.x = 0
             self.y = 0
@@ -248,6 +256,9 @@ class Controller:
             self.x = 0
             self.y = 0
             self.z = 8
+        
+        def printMshipLoc(self):
+            print 'mShip @ Lat: ' + str(self.lat) + ' Lon: ' + str(self.lon) + ' Alt: ' + str(self.alt)
 	# Callbacks
     ## local position callback
     def orientation(self, msg):
@@ -280,6 +291,14 @@ class Controller:
     # Drone heading
     def updateHDG(self, msg):
         self.heading = msg.data
+
+    # Mothership Position Callback
+    def mshipCb(self, msg):
+        self.mship_lat = msg.latitude
+        self.mship_lon = msg.longitude
+        self.mship_alt = msg.altitude
+
+        print 'Updated Mothership at Lat: ' + str(self.mship_lat) + ' Lon: ' + str(self.mship_lon) + ' Alt: ' + str(self.mship_alt)
 
     ## Update setpoint message
     def updateSp(self, x_des, y_des, z_des, yaw=0):
@@ -641,6 +660,9 @@ class Controller:
             self.alg.visual_first_encounter = 0
             self.alg.vis_counter            = 0
             self.alg.vis_app_dist           = self.alg.rendesvouz_dist
+
+    def printLoc(self):
+        print "X: " + str(self.local_pos.x) + " Y: " + str(self.local_pos.y) + " Z: " + str(self.local_pos.z) 
     
     def logData(self, header=None):
         elapsed_time = time.clock()

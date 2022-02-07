@@ -31,6 +31,10 @@ def main():
     # Subscribe to drone's global heading
     rospy.Subscriber('mavros/global_position/compass_hdg', Float64, cnt.updateHDG)
 
+    # Subscribe to the Motherships Global Position
+    rospy.Subscriber('Mothership_Position/mav1pos', NavSatFix, cnt.mshipCb)
+
+
     # Subscribe to the camera image we want to take a look at
     #rospy.Subscriber('iris/usb_cam/image_raw/compressed', CompressedImage, cnt.locateAruco, queue_size=10)
 
@@ -38,11 +42,13 @@ def main():
     sp_pub = rospy.Publisher('mavros/setpoint_raw/local', PositionTarget, queue_size=1)
 
     print 'Pub Sub setup. Trying to arm'
+    cnt.printLoc()
     # Make sure the drone is armed
     while not cnt.state.armed:
+        
         modes.setArm()
-        print 'armed'
         cnt.printLoc()
+        #print 'armed'
         rate.sleep()
 
     # set in takeoff mode and takeoff to default altitude (3 m)
@@ -59,23 +65,8 @@ def main():
     # activate OFFBOARD mode
     modes.setOffboardMode()
 
-    # ROS main loop
-    a  = 0
-    b  = 0
-    ii = 0
-
-    while not rospy.is_shutdown():
-        #In the loop want to have the drone follow behind the block 1m and below 1m inline on Y
-        x_cmd = 0
-        y_cmd = 0
-        z_cmd = 8
-    	cnt.updateSp(x_cmd, y_cmd, z_cmd)
-    	sp_pub.publish(cnt.sp)   
-        ii = ii + 1
-        if ii > 1000:
-            break
-            
-    modes.setAutoLandMode
+    while not rospy.is_shutdown():            
+        modes.setAutoLandMode
 
 
 if __name__ == '__main__':
