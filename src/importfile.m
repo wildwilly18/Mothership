@@ -23,15 +23,15 @@ if nargin < 2
 end
 
 %% Set up the Import Options and import the data
-opts = delimitedTextImportOptions("NumVariables", 18);
+opts = delimitedTextImportOptions("NumVariables", 34);
 
 % Specify range and delimiter
 opts.DataLines = dataLines;
 opts.Delimiter = " ";
 
 % Specify column names and types
-opts.VariableNames = ["Elapsed_Time", "local_X", "local_Y", "local_Z", "R_target_X", "R_target_Y", "R_target_Z", "X_err_integrator", "Y_err_integrator", "visual_mode", "visual_first_enc", "Vis_counter", "Vis_last", "Vis_Consecutive", "Rendesvous_mode", "Algo_counter", "Algo_last", "Algo_consecutive"];
-opts.VariableTypes = ["double", "double", "double", "double", "double", "double", "double", "double", "double", "double", "double", "double", "double", "double", "double", "double", "double", "double"];
+opts.VariableNames = ["Elapsed_Time", "local_X", "local_Y", "local_Z", "R_target_X", "R_target_Y", "R_target_Z", "X_err_integrator", "Y_err_integrator", "visual_mode", "visual_first_enc", "Vis_counter", "Vis_last", "Vis_Consecutive", "Rendesvous_mode", "Algo_counter", "Algo_last", "Algo_consecutive", "Vis_app_dist","Vis_app_cnt", "Vis_app_last", "Vis_app_consecutive", "quad_radius", "safe_radius", "err_mag","quad_safe", "x_vis_err", "y_vis_err", "z_vis_err", "vis_int_x", "vis_int_y", "vis_int_z", "vis_der_x", "vis_der_y", "x_setpoint", "y_setpoint", "z_setpoint", "x_fade","y_fade","z_fade","fade_increment", "V_target_x", "V_target_y", "V_target_z"];
+opts.VariableTypes = ["double", "double", "double", "double", "double", "double", "double", "double", "double", "double", "double", "double", "double", "double", "double", "double", "double", "double","double", "double", "double", "double", "double", "double", "double", "double", "double", "double", "double", "double", "double", "double","double","double", "double","double","double","double","double","double","double","double","double","double"];
 
 % Specify file level properties
 opts.ExtraColumnsRule = "ignore";
