@@ -141,6 +141,10 @@ class Controller:
         self.sp.yaw        = 0
         self.sp.yaw_rate   = 0
 
+        self.lat0 = 0
+        self.lon0 = 0
+        self.alt0 = 0
+
         #initiate a Mothership
         self.mShip = self.Mothership()
         #intantiate an alg
@@ -153,6 +157,7 @@ class Controller:
             #Image Algorithm info
             self.ARUCO_DICT    = cv2.aruco.Dictionary_get(cv2.aruco.DICT_6X6_100) #Initialize the Aruco Dictionary that the controller will use.
             self.ARUCO_PARAMS  = cv2.aruco.DetectorParameters_create()
+
             #Camera intrinsic paramaters determined from matlab camera calibration...
             fx = 5.522067755300895e+02
             fy = 7.449299628154979e+02
@@ -235,40 +240,37 @@ class Controller:
             self.lon = 0
             self.alt = 0
 
+            self.lat0 = 0
+            self.lon0 = 0
+            self.alt0 = 0
+
             self.x = 0
             self.y = 0
             self.z = 0
         
-            print str( str('Mothership found at, X: ') + str(self.x)+ str(' Y: ') + str(self.y)+ str(' Z: ') + str(self.z))
+        def init_Mothership_origin(self, lat0, lon0, alt0):
+            self.lat0 = lat0
+            self.lon0 = lon0
+            self.alt0 = alt0
 
-        def get_sim_location(self):
-            #Just get the values from the ros connection to get the model state to use
-
-            #Update the locations to the Mothership object
-            self.x = 0
-            self.y = 0
-            self.z = 8
-
-        def get_sim_world_location(self):
-            #This function will need to be updated to transfer from sim location to World Location
-            #Just get the values from the ros connection to get the model state to use
-
-            #Update the locations to the Mothership object
-            self.x = 0
-            self.y = 0
-            self.z = 8
+        def update_Mothership_location(self, lat, lon, alt, verbose=0):
+            (self.x, self.y, self.z) =  pm.geodetic2enu(lat, lon, alt, self.lat0, self.lon0, self.alt0)
+            
+            if verbose is 1:
+                print str( str('Mothership found at X: ') + str(self.x)+ str(' Y: ') + str(self.y)+ str(' Z: ') + str(self.z))
+            
         
         def printMshipLoc(self):
             print 'mShip @ Lat: ' + str(self.lat) + ' Lon: ' + str(self.lon) + ' Alt: ' + str(self.alt)
-	# Callbacks
+	
+    def initializeLocalZero(self):
+        (self.lat0, self.lon0, self.alt0) = pm.enu2geodetic(-self.local_pos.x, -self.local_pos.y, -self.local_pos.z, self.latitude, self.longitude, self.alt)
+
+    # Callbacks
     ## local position callback
     def orientation(self, msg):
         orientation_q = msg.orientation
-
-        #print orientation_q
-    
         angles = tf.transformations.euler_from_quaternion([orientation_q.x, orientation_q.y, orientation_q.z, orientation_q.w])
-        #print angles
 
     def posCb(self, msg):
         self.local_pos.x = msg.pose.position.x
@@ -312,6 +314,10 @@ class Controller:
         self.sp_glob.latitude  = msg.latitude
         self.sp_glob.longitude = msg.longitude
         self.sp_glob.altitude  = msg.altitude
+
+        self.latitude  = msg.latitude
+        self.longitude = msg.longitude
+        self.alt       = msg.alt
 
     def updateRendesvousLoc(self):
         self.mShip.get_sim_location()

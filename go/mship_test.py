@@ -41,8 +41,13 @@ def main():
     sp_pub = rospy.Publisher('mavros/setpoint_raw/local', PositionTarget, queue_size=1)
 
     print 'Establishing a connection to the Mothership Position.'
+    print 'Initializing mothership local positioning'
+    cnt.initializeLocalZero()
+
+    cnt.mship.init_Mothership_origin(cnt.lat0, cnt.lon0, cnt.alt0)
     
     while 1:
+        cnt.mship.update_Mothership_location(cnt.mship_lat, cnt.mship_lon, cnt.mship_alt, verbose=1)
         rospy.spin()
 
 
