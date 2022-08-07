@@ -29,68 +29,68 @@ class fcuModes:
         pass
 
     def setTakeoff(self):
-    	rospy.wait_for_service('mavros/cmd/takeoff')
-    	try:
-    		takeoffService = rospy.ServiceProxy('mavros/cmd/takeoff', mavros_msgs.srv.CommandTOL)
-    		takeoffService(altitude = 3)
-    	except rospy.ServiceException, e:
-    		print "Service takeoff call failed%s"%e
+        rospy.wait_for_service('mavros/cmd/takeoff')    
+        try:
+            takeoffService = rospy.ServiceProxy('mavros/cmd/takeoff', mavros_msgs.srv.CoommandTOL)
+            takeoffService(altitude = 3)
+        except rospy.ServiceException as e:
+            print("Service takeoff call failed%s"%e)
 
     def setArm(self):
         rospy.wait_for_service('mavros/cmd/arming')
         try:
             armService = rospy.ServiceProxy('mavros/cmd/arming', mavros_msgs.srv.CommandBool)
             armService(True)
-        except rospy.ServiceException, e:
-            print "Service arming call failed: %s"%e
+        except rospy.ServiceException as e:
+            print("Service arming call failed: %s"%e)
 
     def setDisarm(self):
         rospy.wait_for_service('mavros/cmd/arming')
         try:
             armService = rospy.ServiceProxy('mavros/cmd/arming', mavros_msgs.srv.CommandBool)
             armService(False)
-        except rospy.ServiceException, e:
-            print "Service disarming call failed: %s"%e
+        except rospy.ServiceException as e:
+            print("Service disarming call failed: %s"%e)
 
     def setStabilizedMode(self):
         rospy.wait_for_service('mavros/set_mode')
         try:
             flightModeService = rospy.ServiceProxy('mavros/set_mode', mavros_msgs.srv.SetMode)
             flightModeService(custom_mode='STABILIZED')
-        except rospy.ServiceException, e:
-            print "service set_mode call failed: %s. Stabilized Mode could not be set."%e
+        except rospy.ServiceException as e:
+            print("service set_mode call failed: %s. Stabilized Mode could not be set."%e)
 
     def setOffboardMode(self):
         rospy.wait_for_service('mavros/set_mode')
         try:
             flightModeService = rospy.ServiceProxy('mavros/set_mode', mavros_msgs.srv.SetMode)
             flightModeService(custom_mode='OFFBOARD')
-        except rospy.ServiceException, e:
-            print "service set_mode call failed: %s. Offboard Mode could not be set."%e
+        except rospy.ServiceException as e:
+            print("service set_mode call failed: %s. Offboard Mode could not be set."%e)
 
     def setAltitudeMode(self):
         rospy.wait_for_service('mavros/set_mode')
         try:
             flightModeService = rospy.ServiceProxy('mavros/set_mode', mavros_msgs.srv.SetMode)
             flightModeService(custom_mode='ALTCTL')
-        except rospy.ServiceException, e:
-            print "service set_mode call failed: %s. Altitude Mode could not be set."%e
+        except rospy.ServiceException as e:
+            print("service set_mode call failed: %s. Altitude Mode could not be set."%e)
 
     def setPositionMode(self):
         rospy.wait_for_service('mavros/set_mode')
         try:
             flightModeService = rospy.ServiceProxy('mavros/set_mode', mavros_msgs.srv.SetMode)
             flightModeService(custom_mode='POSCTL')
-        except rospy.ServiceException, e:
-            print "service set_mode call failed: %s. Position Mode could not be set."%e
+        except rospy.ServiceException as e:
+            print("service set_mode call failed: %s. Position Mode could not be set."%e)
 
     def setAutoLandMode(self):
         rospy.wait_for_service('mavros/set_mode')
         try:
             flightModeService = rospy.ServiceProxy('mavros/set_mode', mavros_msgs.srv.SetMode)
             flightModeService(custom_mode='AUTO.LAND')
-        except rospy.ServiceException, e:
-               print "service set_mode call failed: %s. Autoland Mode could not be set."%e
+        except rospy.ServiceException as e:
+               print("service set_mode call failed: %s. Autoland Mode could not be set."%e)
 
 class Controller:
     # initialization method
@@ -260,7 +260,7 @@ class Controller:
             self.y = 0
             self.z = 0
 
-            print str( str('Mothership found at, X: ') + str(self.x)+ str(' Y: ') + str(self.y)+ str(' Z: ') + str(self.z))
+            print(str( str('Mothership found at, X: ') + str(self.x)+ str(' Y: ') + str(self.y)+ str(' Z: ') + str(self.z)))
 
         def get_sim_location(self,lat0,lon0,alt0):
             #Just get the values from the ros connection to get the model state to use
@@ -322,7 +322,7 @@ class Controller:
         #Upon startup of controller set the initial latlon to be used to get xyz of mothership in future.
         (self.lat0, self.lon0, self.alt0) = pm.enu2geodetic(self.local_pos.x, self.local_pos.y, self.local_pos.z, self.sp_glob.latitude, self.sp_glob.longitude, self.sp_glob.altitude)
 
-        print 'Drone Initialized at Lat:' + str(self.lat0) +' Lon:' + str(self.lon0) + ' Alt:' + str(self.alt0)
+        print('Drone Initialized at Lat:' + str(self.lat0) +' Lon:' + str(self.lon0) + ' Alt:' + str(self.alt0))
     # Drone heading
     def updateHDG(self, msg):
         self.heading = msg.data
@@ -367,7 +367,7 @@ class Controller:
         elif(self.alg.rendesvouz_int < -self.alg.rendesvouz_int_max):
             self.alg.rendesvouz_int = -self.alg.rendesvouz_int_max
 
-        print str(self.alg.rendesvouz_int)
+        print(str(self.alg.rendesvouz_int))
         #if we have not encountered do not build any integrator.
 
 
@@ -504,7 +504,7 @@ class Controller:
                     self.alg.vis_int_y = self.alg.vis_int_y + frame_vis_int_y
                     self.alg.vis_int_z = self.alg.vis_int_z + frame_vis_int_z
 
-                    print str(self.alg.vis_int_x)
+                    print(str(self.alg.vis_int_x))
                     #Check max integrator values
                     if(self.alg.vis_int_x > self.alg.vis_int_max):
                         self.alg.vis_int_x = self.alg.vis_int_max
@@ -820,3 +820,4 @@ class Controller:
             return printstr
         else:
             return printheader
+
