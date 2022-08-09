@@ -29,65 +29,65 @@ class fcuModes:
         pass
 
     def setTakeoff(self):
-        rospy.wait_for_service('mavros/cmd/takeoff')    
+        rospy.wait_for_service('uav0/mavros/cmd/takeoff')    
         try:
-            takeoffService = rospy.ServiceProxy('mavros/cmd/takeoff', mavros_msgs.srv.CoommandTOL)
+            takeoffService = rospy.ServiceProxy('uav0/mavros/cmd/takeoff', mavros_msgs.srv.CoommandTOL)
             takeoffService(altitude = 3)
         except rospy.ServiceException as e:
             print("Service takeoff call failed%s"%e)
 
     def setArm(self):
-        rospy.wait_for_service('mavros/cmd/arming')
+        rospy.wait_for_service('uav0/mavros/cmd/arming')
         try:
-            armService = rospy.ServiceProxy('mavros/cmd/arming', mavros_msgs.srv.CommandBool)
+            armService = rospy.ServiceProxy('uav0/mavros/cmd/arming', mavros_msgs.srv.CommandBool)
             armService(True)
         except rospy.ServiceException as e:
             print("Service arming call failed: %s"%e)
 
     def setDisarm(self):
-        rospy.wait_for_service('mavros/cmd/arming')
+        rospy.wait_for_service('uav0/mavros/cmd/arming')
         try:
-            armService = rospy.ServiceProxy('mavros/cmd/arming', mavros_msgs.srv.CommandBool)
+            armService = rospy.ServiceProxy('uav0/mavros/cmd/arming', mavros_msgs.srv.CommandBool)
             armService(False)
         except rospy.ServiceException as e:
             print("Service disarming call failed: %s"%e)
 
     def setStabilizedMode(self):
-        rospy.wait_for_service('mavros/set_mode')
+        rospy.wait_for_service('uav0/mavros/set_mode')
         try:
-            flightModeService = rospy.ServiceProxy('mavros/set_mode', mavros_msgs.srv.SetMode)
+            flightModeService = rospy.ServiceProxy('uav0/mavros/set_mode', mavros_msgs.srv.SetMode)
             flightModeService(custom_mode='STABILIZED')
         except rospy.ServiceException as e:
             print("service set_mode call failed: %s. Stabilized Mode could not be set."%e)
 
     def setOffboardMode(self):
-        rospy.wait_for_service('mavros/set_mode')
+        rospy.wait_for_service('uav0/mavros/set_mode')
         try:
-            flightModeService = rospy.ServiceProxy('mavros/set_mode', mavros_msgs.srv.SetMode)
+            flightModeService = rospy.ServiceProxy('uav0/mavros/set_mode', mavros_msgs.srv.SetMode)
             flightModeService(custom_mode='OFFBOARD')
         except rospy.ServiceException as e:
             print("service set_mode call failed: %s. Offboard Mode could not be set."%e)
 
     def setAltitudeMode(self):
-        rospy.wait_for_service('mavros/set_mode')
+        rospy.wait_for_service('uav0/mavros/set_mode')
         try:
-            flightModeService = rospy.ServiceProxy('mavros/set_mode', mavros_msgs.srv.SetMode)
+            flightModeService = rospy.ServiceProxy('uav0/mavros/set_mode', mavros_msgs.srv.SetMode)
             flightModeService(custom_mode='ALTCTL')
         except rospy.ServiceException as e:
             print("service set_mode call failed: %s. Altitude Mode could not be set."%e)
 
     def setPositionMode(self):
-        rospy.wait_for_service('mavros/set_mode')
+        rospy.wait_for_service('uav0/mavros/set_mode')
         try:
-            flightModeService = rospy.ServiceProxy('mavros/set_mode', mavros_msgs.srv.SetMode)
+            flightModeService = rospy.ServiceProxy('uav0/mavros/set_mode', mavros_msgs.srv.SetMode)
             flightModeService(custom_mode='POSCTL')
         except rospy.ServiceException as e:
             print("service set_mode call failed: %s. Position Mode could not be set."%e)
 
     def setAutoLandMode(self):
-        rospy.wait_for_service('mavros/set_mode')
+        rospy.wait_for_service('uav0/mavros/set_mode')
         try:
-            flightModeService = rospy.ServiceProxy('mavros/set_mode', mavros_msgs.srv.SetMode)
+            flightModeService = rospy.ServiceProxy('uav0/mavros/set_mode', mavros_msgs.srv.SetMode)
             flightModeService(custom_mode='AUTO.LAND')
         except rospy.ServiceException as e:
                print("service set_mode call failed: %s. Autoland Mode could not be set."%e)
@@ -120,30 +120,41 @@ class Controller:
         # update the setpoint message with the required altitude
         self.sp.position.z = self.ALT_SP
 
-        #Match the velocity of the flying craft
-        #self.sp.velocity.x = #x portion of velocity vector.
-        #self.sp.velocity.y = #y portion of velocity vector.
-
         # A Message for the current local position of the drone
         self.local_pos = Point(0.0, 0.0, 1.0)
 
-        self.yaw   = 0
-        self.pitch = 0
-        self.roll  = 0
+        self.yaw   = 0.0
+        self.pitch = 0.0
+        self.roll  = 0.0
 
         # initial values for setpoints
         self.sp.position.x = 0.0
         self.sp.position.y = 0.0
-        self.sp.yaw        = 0
-        self.sp.yaw_rate   = 0
+        self.sp.yaw        = 0.0
+        self.sp.yaw_rate   = 0.0
 
-        self.lat0 = 0
-        self.lon0 = 0
-        self.alt0 = 0
+        # Global2World Reference frame to convert mothership into chase ship local coordinates.
+        self.lat0 = 0.0
+        self.lon0 = 0.0
+        self.alt0 = 0.0
 
-        #initiate a Mothership
-        self.mShip = self.Mothership()
-        #intantiate an alg
+        #Flag to set if global origin set
+        self.globalOrigin_Set = False
+
+        # Mothership global_loc
+        self.mship_lat = 0.0
+        self.mship_lon = 0.0
+        self.mship_h   = 0.0
+
+        # Mothership local_loc
+        self.mship_x   = 0.0
+        self.mship_y   = 0.0
+        self.mship_z   = 0.0
+
+        #Flag for when the mothership is located. This could get extremely complex in a real application but for now keeping it pretty simple
+        self.mship_located = False
+
+        #intantiate an alg class
         self.alg   = self.Algorithm()
 
     class Algorithm:
@@ -245,21 +256,20 @@ class Controller:
 
 
     #Class to get the information from the Mothership in the sim.
-
+    #Deprecated. Not going to use a separate class anymore.
     class Mothership:
         def __init__(self):
-            #Code for the sim to get the mothership xyz location... 
-            model_coordinates = rospy.ServiceProxy('/gazebo/get_model_state', GetModelState)
-            mShip_coordinates = model_coordinates("mothership", "")
+            #Initialize xyz to zero. Will update this location once the Motherhip is identified
+            self.lat = 0.0
+            self.lon = 0.0
+            self.alt = 0.0
+            self.x = 0.0
+            self.y = 0.0
+            self.z = 0.0
+            self.mship_init = False
 
-            #Initialize xyz to zero. Will update
-            self.lat = 0
-            self.lon = 0
-            self.alt = 0
-            self.x = 0
-            self.y = 0
-            self.z = 0
-
+        def update_Mothership_loc(self, msg):
+            (self.x, self.y, self.z) = pm.geodetic2enu(lat,lon,alt,)
             print(str( str('Mothership found at, X: ') + str(self.x)+ str(' Y: ') + str(self.y)+ str(' Z: ') + str(self.z)))
 
         def get_sim_location(self,lat0,lon0,alt0):
@@ -279,17 +289,20 @@ class Controller:
             #Now convert lat lon alt to xyz
             (self.x, self.y, self.z) = pm.geodetic2enu(self.lat, self.lon, self.alt, lat0, lon0, alt0)
 
-        def get_sim_world_location(self):
-            #This function will need to be updated to transfer from sim location to World Location
-            #Just get the values from the ros connection to get the model state to use
-            model_coordinates = rospy.ServiceProxy('/gazebo/get_model_state', GetModelState)
-            mShip_coordinates = model_coordinates("mothership", "")
-
-            #Update the locations to the Mothership object
-            self.x = mShip_coordinates.pose.position.x
-            self.y = mShip_coordinates.pose.position.y
-            self.z = mShip_coordinates.pose.position.z
 	# Callbacks
+    ## Mothership location callback
+    def updateMothershipLoc(self, msg):
+        self.mship_lat = msg.latitude
+        self.mship_lon = msg.longitude
+        self.mship_h   = msg.h
+
+        #Take the input lat lon h and lat0 lon0 h0 for the chase to get local coordinate conversion
+        (self.mship_x, self.mship_y, self.mship_z) = pm.geodetic2enu(self.mship_lat, self.mship_lon, self.mship_h, self.lat0, self.lon0, self.h0)
+
+        if(self.mship_located == False and self.globalOrigin_Set == True):
+            self.mship_located = True
+            print(str('Mothership found at, X:') + str(self.mship_x) + str(' Y: ') + str(self.mship_y) + str(' Z: ') + str(self.mship_z))
+
     ## local position callback
     def orientation(self, msg):
         orientation_q = msg.orientation
@@ -321,8 +334,8 @@ class Controller:
     def initLatLon(self):
         #Upon startup of controller set the initial latlon to be used to get xyz of mothership in future.
         (self.lat0, self.lon0, self.alt0) = pm.enu2geodetic(self.local_pos.x, self.local_pos.y, self.local_pos.z, self.sp_glob.latitude, self.sp_glob.longitude, self.sp_glob.altitude)
-
         print('Drone Initialized at Lat:' + str(self.lat0) +' Lon:' + str(self.lon0) + ' Alt:' + str(self.alt0))
+    
     # Drone heading
     def updateHDG(self, msg):
         self.heading = msg.data
@@ -338,6 +351,10 @@ class Controller:
         self.sp_glob.latitude  = msg.latitude
         self.sp_glob.longitude = msg.longitude
         self.sp_glob.altitude  = msg.altitude
+
+        if(self.globalOrigin_Set == False):
+            self.initLatLon()
+            self.globalOrigin_Set = True
 
     def updateRendesvousLoc(self):
         self.mShip.get_sim_location(self.lat0, self.lon0, self.alt0)
