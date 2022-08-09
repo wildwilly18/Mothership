@@ -254,41 +254,6 @@ class Controller:
             self.fade_target_y = 0.0
             self.fade_target_z = 0.0 
 
-
-    #Class to get the information from the Mothership in the sim.
-    #Deprecated. Not going to use a separate class anymore.
-    class Mothership:
-        def __init__(self):
-            #Initialize xyz to zero. Will update this location once the Motherhip is identified
-            self.lat = 0.0
-            self.lon = 0.0
-            self.alt = 0.0
-            self.x = 0.0
-            self.y = 0.0
-            self.z = 0.0
-            self.mship_init = False
-
-        def update_Mothership_loc(self, msg):
-            (self.x, self.y, self.z) = pm.geodetic2enu(lat,lon,alt,)
-            print(str( str('Mothership found at, X: ') + str(self.x)+ str(' Y: ') + str(self.y)+ str(' Z: ') + str(self.z)))
-
-        def get_sim_location(self,lat0,lon0,alt0):
-            #Just get the values from the ros connection to get the model state to use
-            model_coordinates = rospy.ServiceProxy('/gazebo/get_model_state', GetModelState)
-            mShip_coordinates = model_coordinates("mothership", "")
-
-            #Update the locations to the Mothership object
-            x = mShip_coordinates.pose.position.x
-            y = mShip_coordinates.pose.position.y
-            z = mShip_coordinates.pose.position.z
-
-            #ROS Coordinate frame is East(X) North(Y) Up(Z)
-            #This line is to sim what we would be given via UTM_GLOBAL_POSITION
-            (self.lat, self.lon, self.alt) = pm.enu2geodetic(x,y,z,lat0,lon0,alt0)
-
-            #Now convert lat lon alt to xyz
-            (self.x, self.y, self.z) = pm.geodetic2enu(self.lat, self.lon, self.alt, lat0, lon0, alt0)
-
 	# Callbacks
     ## Mothership location callback
     def updateMothershipLoc(self, msg):
