@@ -16,8 +16,6 @@ def main():
     # controller object
     cnt = Controller()
 
-    # Mothership object to track
-    mShip = cnt.Mothership()
 
     # ROS loop rate
     rate = rospy.Rate(20.0)
@@ -51,11 +49,12 @@ def main():
     # Make sure the drone is armed
     while not cnt.state.armed:
         modes.setArm()
-        print('armed')
         rate.sleep()
 
+    print('armed')
     # set in takeoff mode and takeoff to default altitude (3 m)
     modes.setTakeoff()
+    print("set take off")
     rate.sleep()
 
     # We need to send few setpoint messages, then activate OFFBOARD mode, to take effect
@@ -73,7 +72,7 @@ def main():
         if(cnt.mship_located):
             x_cmd = cnt.mship_x
             y_cmd = cnt.mship_y
-            z_cmd = cnt.mship_z - 2
+            z_cmd = cnt.mship_z - 1.5
             cnt.updateSp(x_cmd, y_cmd, z_cmd)
             sp_pub.publish(cnt.sp)
 

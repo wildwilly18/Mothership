@@ -11,8 +11,6 @@ def main():
     #Get a start time of script
     start_time = time.clock()
 
-
-
     # initiate node
     rospy.init_node('setpoint_node', anonymous=True)
 
@@ -29,41 +27,41 @@ def main():
 
     logFile.writelines(printheader)
 
-    # Mothership object to track
-    #mShip = Mothership()
-
     # ROS loop rate
     rate = rospy.Rate(20.0)
 
     # Subscribe to drone state
-    rospy.Subscriber('mavros/state', State, cnt.stateCb)
+    rospy.Subscriber('uav0/mavros/state', State, cnt.stateCb)
 
     # Subscribe to drone's local position
-    rospy.Subscriber('mavros/local_position/pose', PoseStamped, cnt.posCb)
+    rospy.Subscriber('uav0/mavros/local_position/pose', PoseStamped, cnt.posCb)
     
     # Subscribe to drone's global position
-    rospy.Subscriber('mavros/global_position/global', NavSatFix, cnt.globalLoc)
+    rospy.Subscriber('uav0/mavros/global_position/global', NavSatFix, cnt.globalLoc)
 
     # Subscribe to drone's IMU for its Orientation in quaternions
-    rospy.Subscriber('mavros/imu/data', Imu, cnt.orientation)
+    rospy.Subscriber('uav0/mavros/imu/data', Imu, cnt.orientation)
     # Subscribe to drone's global heading
-    rospy.Subscriber('mavros/global_position/compass_hdg', Float64, cnt.updateHDG)
+    rospy.Subscriber('uav0/mavros/global_position/compass_hdg', Float64, cnt.updateHDG)
 
     # Subscribe to the camera image we want to take a look at
-    rospy.Subscriber('iris/usb_cam/image_raw/compressed', CompressedImage, cnt.imgCallback, queue_size=10)
+    rospy.Subscriber('iris0/usb_cam/image_raw/compressed', CompressedImage, cnt.imgCallback, queue_size=10)
+
+    # Subscribe to mothership drone's global position, update callback fnc
+    rospy.Subscriber('uav1/mavros/global_position/global', NavSatFix, cnt.updateMothershipLoc)
 
     # Setpoint publisher    
     sp_pub = rospy.Publisher('mavros/setpoint_raw/local', PositionTarget, queue_size=1)
 
     # Before arming initialize lat0 lon0 and alt0
-    print 'Initializing Lat Lon'
+    print('Initializing Lat Lon')
     cnt.initLatLon()
     
-    print 'Pub Sub setup. Trying to arm'
+    print('Pub Sub setup. Trying to arm')
     # Make sure the drone is armed
     while not cnt.state.armed:
         modes.setArm()
-        print 'armed'
+        print('armed')
         rate.sleep()
 
     # set in takeoff mode and takeoff to default altitude (3 m)
@@ -74,7 +72,7 @@ def main():
     k=0
     while k<10:
         loggedData = cnt.logData()
-        print loggedData
+        print(loggedData)
         sp_pub.publish(cnt.sp)
         rate.sleep()
         k = k + 1
@@ -105,10 +103,9 @@ def main():
         #print loggedData
         logFile.writelines(loggedData)
 
-        
         #If object can enter visual mode it will enter this loop. This loop only uses visual for confidence.
         while cnt.alg.visual_mode:
-                
+
             #After deeming we can enter visual mode begin to fade from Rendesvouz to Visual Mode
             while cnt.alg.mode_fade_increment < 1.0:
                 cnt.updateRendesvousLoc()
@@ -125,7 +122,7 @@ def main():
                 loggedData = cnt.logData()
                 #print loggedData
                 logFile.writelines(loggedData)
-                print 'Fade Val:' + str(cnt.alg.mode_fade_increment)
+                print('Fade Val:' + str(cnt.alg.mode_fade_increment))
                 cnt.alg.mode_fade_increment = cnt.alg.mode_fade_increment + 0.001
 
             loggedData = cnt.logData()

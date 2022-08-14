@@ -21,8 +21,6 @@ from scipy.spatial.transform import Rotation as R
 from mavros_msgs.msg import *
 from mavros_msgs.srv import *
 
-#Gazebo messasges Remove for real world app
-from gazebo_msgs.srv import GetModelState
 
 class fcuModes:
     def __init__(self):
@@ -31,8 +29,8 @@ class fcuModes:
     def setTakeoff(self):
         rospy.wait_for_service('uav0/mavros/cmd/takeoff')    
         try:
-            takeoffService = rospy.ServiceProxy('uav0/mavros/cmd/takeoff', mavros_msgs.srv.CoommandTOL)
-            takeoffService(altitude = 3)
+            takeoffService = rospy.ServiceProxy('uav0/mavros/cmd/takeoff', mavros_msgs.srv.CommandTOL)
+            takeoffService(altitude = 6)
         except rospy.ServiceException as e:
             print("Service takeoff call failed%s"%e)
 
@@ -259,10 +257,10 @@ class Controller:
     def updateMothershipLoc(self, msg):
         self.mship_lat = msg.latitude
         self.mship_lon = msg.longitude
-        self.mship_h   = msg.h
+        self.mship_h   = msg.altitude
 
         #Take the input lat lon h and lat0 lon0 h0 for the chase to get local coordinate conversion
-        (self.mship_x, self.mship_y, self.mship_z) = pm.geodetic2enu(self.mship_lat, self.mship_lon, self.mship_h, self.lat0, self.lon0, self.h0)
+        (self.mship_x, self.mship_y, self.mship_z) = pm.geodetic2enu(self.mship_lat, self.mship_lon, self.mship_h, self.lat0, self.lon0, self.alt0)
 
         if(self.mship_located == False and self.globalOrigin_Set == True):
             self.mship_located = True
@@ -604,10 +602,9 @@ class Controller:
 
                 #Printing for debug purposes
                 loc_string = str('yaw: ') + str(rvecs[0][0][2]) + str(' z-dist: ') + str(tvecs[0][0][2])
-                #print loc_string
+                print(loc_string)
                 cnt = cnt + 1
                 
-
         cv2.imshow('cv_img', grey_im)
         cv2.waitKey(2)
 
