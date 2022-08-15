@@ -30,7 +30,7 @@ class fcuModes:
         rospy.wait_for_service('uav0/mavros/cmd/takeoff')    
         try:
             takeoffService = rospy.ServiceProxy('uav0/mavros/cmd/takeoff', mavros_msgs.srv.CommandTOL)
-            takeoffService(altitude = 6)
+            takeoffService(altitude = 3)
         except rospy.ServiceException as e:
             print("Service takeoff call failed%s"%e)
 
@@ -234,7 +234,7 @@ class Controller:
 
             #Rendezvous target, 2m distance from the ship. Position behind and below to match quads estimated pitch for speed.
             self.rs_target_x = -self.rendesvouz_dist * math.cos(self.pitch_2_match_vel)
-            self.rs_target_y =  0
+            self.rs_target_y =  0.0
             self.rs_target_z =  self.rendesvouz_dist * math.sin(self.pitch_2_match_vel)
 
             self.rs_target_x_clean = self.rs_target_x
@@ -244,7 +244,7 @@ class Controller:
             #Visual Servo X, Y & Z positions, start at 2 m dist off the mship. Is a func of mship speed and pithc
             #Below assumption is moving in x dir only
             self.vs_target_x = -self.rendesvouz_dist * math.cos(self.pitch_2_match_vel)
-            self.vs_target_y =  0 #eventually will 
+            self.vs_target_y =  0.0 #eventually will 
             self.vs_target_z =  self.rendesvouz_dist * math.sin(self.pitch_2_match_vel)
 
             #Save mixed target values as to not overwrite Visual or Rendezvous targets
@@ -266,6 +266,7 @@ class Controller:
             self.mship_located = True
             print(str('Mothership found at, X:') + str(self.mship_x) + str(' Y: ') + str(self.mship_y) + str(' Z: ') + str(self.mship_z))
 
+        #print(('Mothership found at, X:') + str(self.mship_x) + ' Y: ' + str(self.mship_y) + ' Z: ' + str(self.mship_z))
     ## local position callback
     def orientation(self, msg):
         orientation_q = msg.orientation
@@ -320,11 +321,9 @@ class Controller:
             self.globalOrigin_Set = True
 
     def updateRendesvousLoc(self):
-        self.mShip.get_sim_location(self.lat0, self.lon0, self.alt0)
-
-        self.alg.rs_target_x_clean = self.mShip.x + (2 * math.sin(0))# + (self.alg.rendesvouz_ff_gain * self.alg.mothership_vel)#Eventually will be heading
-        self.alg.rs_target_y_clean = self.mShip.y + (0) #Eventually will be heading 
-        self.alg.rs_target_z_clean = self.mShip.z - (2 * math.cos(self.alg.pitch_2_match_vel))
+        self.alg.rs_target_x_clean = self.mship_x + (2 * math.sin(0))# + (self.alg.rendesvouz_ff_gain * self.alg.mothership_vel)#Eventually will be heading
+        self.alg.rs_target_y_clean = self.mship_y + (0) #Eventually will be heading 
+        self.alg.rs_target_z_clean = self.mship_z - (2 * math.cos(self.alg.pitch_2_match_vel))
 
         #Check error and integrate it.
         #x y plane error
@@ -347,9 +346,7 @@ class Controller:
         elif(self.alg.rendesvouz_int < -self.alg.rendesvouz_int_max):
             self.alg.rendesvouz_int = -self.alg.rendesvouz_int_max
 
-        print(str(self.alg.rendesvouz_int))
         #if we have not encountered do not build any integrator.
-
 
         #Store error for last error
         self.alg.error_vec_last = error_vec
@@ -364,9 +361,12 @@ class Controller:
 
         #Add integrator to target.
         #print x_error_int
-        self.alg.rs_target_x = self.mShip.x +  0.1 * error_vec + self.alg.x_error_int #+ (self.alg.rendesvouz_ff_gain * self.alg.mothership_vel)#Eventually will be including heading
-        self.alg.rs_target_y = self.mShip.y  #Eventually will be including heading 
-        self.alg.rs_target_z = self.mShip.z - (2 * math.cos(self.alg.pitch_2_match_vel))        
+        self.alg.rs_target_x = self.mship_x #+  0.1 * error_vec + self.alg.x_error_int #+ (self.alg.rendesvouz_ff_gain * self.alg.mothership_vel)#Eventually will be including heading
+        self.alg.rs_target_y = self.mship_y  #Eventually will be including heading 
+        self.alg.rs_target_z = self.mship_z #- (2 * math.cos(self.alg.pitch_2_match_vel))   
+
+        #Trying to Debug
+        print('Going to X: ' + str(self.alg.rs_target_x) + ' Y: ' + str(self.alg.rs_target_y) + ' Z: ' + str(self.alg.rs_target_z))     
 
     def updateVisErr(self, cam2aruco):
         d = self.alg.vis_app_dist
@@ -446,8 +446,6 @@ class Controller:
                 self.alg.vis_app_dist = self.alg.vis_target_dist #Stop at the target distance. So we aren't kicked out of the visual algorithm
 
     def updateVisLoc(self, img):
-        self.mShip.get_sim_location(self.lat0, self.lon0, self.alt0)
-
         (corners, ids, rejected) = cv2.aruco.detectMarkers(img, self.alg.ARUCO_DICT, parameters=self.alg.ARUCO_PARAMS)
 
         if ids is not None:
@@ -526,8 +524,6 @@ class Controller:
 
     def cam2Local(self, cam_pts):
         #Here in the function build the Rot matrix of the quadcopter, take XYZ points from camera, [y x z 1] format. Rot_Mat * Cam_Pts will give Aruco wrld pts
-        
-
         roll  = self.roll
         pitch = self.pitch
         yaw   = self.yaw 

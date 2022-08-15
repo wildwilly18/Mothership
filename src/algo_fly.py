@@ -11,6 +11,7 @@ def main():
     #Get a start time of script
     start_time = time.clock()
 
+
     # initiate node
     rospy.init_node('setpoint_node', anonymous=True)
 
@@ -20,15 +21,15 @@ def main():
     # controller object
     cnt = Controller()
 
+    # ROS loop rate
+    rate = rospy.Rate(20.0)
+
     #Open up a file to write the data too.
     logFile = open("out.txt", 'w')
     
     printheader = cnt.logData('header')
 
     logFile.writelines(printheader)
-
-    # ROS loop rate
-    rate = rospy.Rate(20.0)
 
     # Subscribe to drone state
     rospy.Subscriber('uav0/mavros/state', State, cnt.stateCb)
@@ -53,32 +54,34 @@ def main():
     # Setpoint publisher    
     sp_pub = rospy.Publisher('mavros/setpoint_raw/local', PositionTarget, queue_size=1)
 
-    # Before arming initialize lat0 lon0 and alt0
-    print('Initializing Lat Lon')
-    cnt.initLatLon()
     
     print('Pub Sub setup. Trying to arm')
     # Make sure the drone is armed
+
     while not cnt.state.armed:
         modes.setArm()
         print('armed')
         rate.sleep()
 
+    # Before arming initialize lat0 lon0 and alt0
+    print('Initializing Lat Lon')
+    cnt.initLatLon()
+
     # set in takeoff mode and takeoff to default altitude (3 m)
     modes.setTakeoff()
+    print("Set Takeoff")
     rate.sleep()
 
     # We need to send few setpoint messages, then activate OFFBOARD mode, to take effect
     k=0
     while k<10:
-        loggedData = cnt.logData()
-        print(loggedData)
         sp_pub.publish(cnt.sp)
         rate.sleep()
         k = k + 1
 
     # activate OFFBOARD mode
     modes.setOffboardMode()
+    print("offboardMode Set")
 
     # ROS main loop
     while not rospy.is_shutdown():
@@ -88,6 +91,7 @@ def main():
 
         #Determine if the Aircraft is at Rendesvous Location.
         cnt.determineAtRendesvous()
+
         #Look for an ID and start tracking image confidence
         cnt.determineVisualAlg(cnt.alg.img)
 
