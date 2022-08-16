@@ -136,6 +136,11 @@ class Controller:
         self.lon0 = 0.0
         self.alt0 = 0.0
 
+        # Also need to save xyz of origin or else conversions wont work.
+        self.x0 = 0.0
+        self.y0 = 0.0
+        self.z0 = 0.0
+
         #Flag to set if global origin set
         self.globalOrigin_Set = False
 
@@ -148,6 +153,11 @@ class Controller:
         self.mship_x   = 0.0
         self.mship_y   = 0.0
         self.mship_z   = 0.0
+
+        self.mship_x_avg   = 0.0
+        self.mship_y_avg   = 0.0
+        self.mship_z_avg   = 0.0
+
 
         #Flag for when the mothership is located. This could get extremely complex in a real application but for now keeping it pretty simple
         self.mship_located = False
@@ -255,17 +265,22 @@ class Controller:
 	# Callbacks
     ## Mothership location callback
     def updateMothershipLoc(self, msg):
-        self.mship_lat = msg.latitude
-        self.mship_lon = msg.longitude
-        self.mship_h   = msg.altitude
+        if self.globalOrigin_Set:
+            self.mship_lat = msg.latitude
+            self.mship_lon = msg.longitude
+            self.mship_h   = msg.altitude
 
-        #Take the input lat lon h and lat0 lon0 h0 for the chase to get local coordinate conversion
-        (self.mship_x, self.mship_y, self.mship_z) = pm.geodetic2enu(self.mship_lat, self.mship_lon, self.mship_h, self.lat0, self.lon0, self.alt0)
+            #Take the input lat lon h and lat0 lon0 h0 for the chase to get local coordinate conversion
+            (self.mship_x, self.mship_y, self.mship_z) = pm.geodetic2enu(self.mship_lat, self.mship_lon, self.mship_h, self.lat0, self.lon0, self.alt0)
+
+            #Add in origin offset. This is the step I had been forgetting that was causing alignment issues. 
+            self.mship_x = self.mship_x - self.x0
+            self.mship_y = self.mship_y - self.y0
+            self.mship_z = self.mship_z - self.z0
 
         if(self.mship_located == False and self.globalOrigin_Set == True):
             self.mship_located = True
             print(str('Mothership found at, X:') + str(self.mship_x) + str(' Y: ') + str(self.mship_y) + str(' Z: ') + str(self.mship_z))
-
         #print(('Mothership found at, X:') + str(self.mship_x) + ' Y: ' + str(self.mship_y) + ' Z: ' + str(self.mship_z))
     ## local position callback
     def orientation(self, msg):
@@ -290,15 +305,24 @@ class Controller:
         self.pitch = angles[1]
         self.yaw   = angles[2]
 
-        #print str('yaw: ' + str(self.yaw * 180 / 3.14) + ' pitch: ' + str(self.pitch * 180 / 3.14)+ ' roll: ' + str(self.roll * 180 / 3.14))
+
     ## Drone State callback
     def stateCb(self, msg):
         self.state = msg
 
     def initLatLon(self):
-        #Upon startup of controller set the initial latlon to be used to get xyz of mothership in future.
-        (self.lat0, self.lon0, self.alt0) = pm.enu2geodetic(self.local_pos.x, self.local_pos.y, self.local_pos.z, self.sp_glob.latitude, self.sp_glob.longitude, self.sp_glob.altitude)
-        print('Drone Initialized at Lat:' + str(self.lat0) +' Lon:' + str(self.lon0) + ' Alt:' + str(self.alt0))
+        if not self.globalOrigin_Set:
+            self.x0 = self.local_pos.x
+            self.y0 = self.local_pos.y
+            self.z0 = self.local_pos.z
+            #Upon startup of controller set the initial latlon to be used to get xyz of mothership in future.
+            (self.lat0, self.lon0, self.alt0) = pm.enu2geodetic(self.x0, self.y0, self.z0, self.sp_glob.latitude, self.sp_glob.longitude, self.sp_glob.altitude)
+
+            print('Drone Initialized at Lat:' + str(self.lat0) +' Lon:' + str(self.lon0) + ' Alt:' + str(self.alt0))
+            print('Sim Origin at: ' + str(self.x0) + ' Y: ' + str(self.y0) + ' Z: ' + str(self.z0))
+            self.globalOrigin_Set = True
+        else:
+            print("Whoops! Global origin is already set... Warning!!! Warning!!!")
     
     # Drone heading
     def updateHDG(self, msg):
@@ -316,12 +340,8 @@ class Controller:
         self.sp_glob.longitude = msg.longitude
         self.sp_glob.altitude  = msg.altitude
 
-        if(self.globalOrigin_Set == False):
-            self.initLatLon()
-            self.globalOrigin_Set = True
-
     def updateRendesvousLoc(self):
-        self.alg.rs_target_x_clean = self.mship_x + (2 * math.sin(0))# + (self.alg.rendesvouz_ff_gain * self.alg.mothership_vel)#Eventually will be heading
+        self.alg.rs_target_x_clean = self.mship_x# + (2 * math.sin(0))# + (self.alg.rendesvouz_ff_gain * self.alg.mothership_vel)#Eventually will be heading
         self.alg.rs_target_y_clean = self.mship_y + (0) #Eventually will be heading 
         self.alg.rs_target_z_clean = self.mship_z - (2 * math.cos(self.alg.pitch_2_match_vel))
 
@@ -359,11 +379,19 @@ class Controller:
         #Stor the integrator to transsfer to the visual algorithm
         #self.alg.vis_int_x = self.alg.x_error_int
 
+        #Add in a moving average for each values for Weird Off Global Values
+        self.mship_x_avg = self.mship_x_avg - (self.mship_x_avg / 10)
+        self.mship_y_avg = self.mship_y_avg - (self.mship_y_avg / 10)
+        self.mship_z_avg = self.mship_z_avg - (self.mship_z_avg / 10)
+
+        self.mship_x_avg = self.mship_x_avg + (self.mship_x / 10)
+        self.mship_y_avg = self.mship_y_avg + (self.mship_y / 10)
+        self.mship_z_avg = self.mship_z_avg + (self.mship_z / 10)
         #Add integrator to target.
         #print x_error_int
-        self.alg.rs_target_x = self.mship_x #+  0.1 * error_vec + self.alg.x_error_int #+ (self.alg.rendesvouz_ff_gain * self.alg.mothership_vel)#Eventually will be including heading
-        self.alg.rs_target_y = self.mship_y  #Eventually will be including heading 
-        self.alg.rs_target_z = self.mship_z #- (2 * math.cos(self.alg.pitch_2_match_vel))   
+        self.alg.rs_target_x = self.mship_x_avg #+  0.1 * error_vec + self.alg.x_error_int #+ (self.alg.rendesvouz_ff_gain * self.alg.mothership_vel)#Eventually will be including heading
+        self.alg.rs_target_y = self.mship_y_avg  #Eventually will be including heading 
+        self.alg.rs_target_z = self.mship_z_avg - 2 #(2 * math.cos(self.alg.pitch_2_match_vel))   
 
         #Trying to Debug
         print('Going to X: ' + str(self.alg.rs_target_x) + ' Y: ' + str(self.alg.rs_target_y) + ' Z: ' + str(self.alg.rs_target_z))     
@@ -376,8 +404,8 @@ class Controller:
         z_vis = cam2aruco[2]
 
         #Calculate x y z error of the quad relative to the target.
-        self.alg.x_vis_err = (d * math.sin(self.alg.pitch_2_match_vel)) + x_vis #Eventually will add heading
-        self.alg.y_vis_err = (0) + y_vis#Eventually will be heading 
+        self.alg.x_vis_err = (0) + x_vis #(d * math.sin(self.alg.pitch_2_match_vel)) + x_vis #Eventually will add heading
+        self.alg.y_vis_err = (0) + y_vis #Eventually will be heading 
         self.alg.z_vis_err = (d * math.cos(self.alg.pitch_2_match_vel)) - z_vis
 
         #print str('x_vis_err:' + str(self.alg.x_vis_err))

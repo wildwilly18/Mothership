@@ -52,10 +52,8 @@ def main():
     # Setpoint publisher    
     sp_pub = rospy.Publisher('uav0/mavros/setpoint_raw/local', PositionTarget, queue_size=1)
 
-
-    # Make sure the drone is armed
     time.sleep(5)
-    # Before arming initialize lat0 lon0 and alt0
+    # Before arming initialize lat0 lon0 and alt0. Sleeping first to let things settle. 
     print('Initializing Lat Lon')
     cnt.initLatLon()
 
