@@ -21,76 +21,74 @@ from scipy.spatial.transform import Rotation as R
 from mavros_msgs.msg import *
 from mavros_msgs.srv import *
 
-#Gazebo messasges Remove for real world app
-from gazebo_msgs.srv import GetModelState
 
 class fcuModes:
     def __init__(self):
         pass
 
     def setTakeoff(self):
-    	rospy.wait_for_service('mavros/cmd/takeoff')
-    	try:
-    		takeoffService = rospy.ServiceProxy('mavros/cmd/takeoff', mavros_msgs.srv.CommandTOL)
-    		takeoffService(altitude = 3)
-    	except rospy.ServiceException, e:
-    		print "Service takeoff call failed%s"%e
+        rospy.wait_for_service('uav0/mavros/cmd/takeoff')    
+        try:
+            takeoffService = rospy.ServiceProxy('uav0/mavros/cmd/takeoff', mavros_msgs.srv.CommandTOL)
+            takeoffService(altitude = 3)
+        except rospy.ServiceException as e:
+            print("Service takeoff call failed%s"%e)
 
     def setArm(self):
-        rospy.wait_for_service('mavros/cmd/arming')
+        rospy.wait_for_service('uav0/mavros/cmd/arming')
         try:
-            armService = rospy.ServiceProxy('mavros/cmd/arming', mavros_msgs.srv.CommandBool)
+            armService = rospy.ServiceProxy('uav0/mavros/cmd/arming', mavros_msgs.srv.CommandBool)
             armService(True)
-        except rospy.ServiceException, e:
-            print "Service arming call failed: %s"%e
+        except rospy.ServiceException as e:
+            print("Service arming call failed: %s"%e)
 
     def setDisarm(self):
-        rospy.wait_for_service('mavros/cmd/arming')
+        rospy.wait_for_service('uav0/mavros/cmd/arming')
         try:
-            armService = rospy.ServiceProxy('mavros/cmd/arming', mavros_msgs.srv.CommandBool)
+            armService = rospy.ServiceProxy('uav0/mavros/cmd/arming', mavros_msgs.srv.CommandBool)
             armService(False)
-        except rospy.ServiceException, e:
-            print "Service disarming call failed: %s"%e
+        except rospy.ServiceException as e:
+            print("Service disarming call failed: %s"%e)
 
     def setStabilizedMode(self):
-        rospy.wait_for_service('mavros/set_mode')
+        rospy.wait_for_service('uav0/mavros/set_mode')
         try:
-            flightModeService = rospy.ServiceProxy('mavros/set_mode', mavros_msgs.srv.SetMode)
+            flightModeService = rospy.ServiceProxy('uav0/mavros/set_mode', mavros_msgs.srv.SetMode)
             flightModeService(custom_mode='STABILIZED')
-        except rospy.ServiceException, e:
-            print "service set_mode call failed: %s. Stabilized Mode could not be set."%e
+        except rospy.ServiceException as e:
+            print("service set_mode call failed: %s. Stabilized Mode could not be set."%e)
 
     def setOffboardMode(self):
-        rospy.wait_for_service('mavros/set_mode')
+        rospy.wait_for_service('uav0/mavros/set_mode')
         try:
-            flightModeService = rospy.ServiceProxy('mavros/set_mode', mavros_msgs.srv.SetMode)
+            flightModeService = rospy.ServiceProxy('uav0/mavros/set_mode', mavros_msgs.srv.SetMode)
             flightModeService(custom_mode='OFFBOARD')
-        except rospy.ServiceException, e:
-            print "service set_mode call failed: %s. Offboard Mode could not be set."%e
+        except rospy.ServiceException as e:
+            print("service set_mode call failed: %s. Offboard Mode could not be set."%e)
 
     def setAltitudeMode(self):
-        rospy.wait_for_service('mavros/set_mode')
+        rospy.wait_for_service('uav0/mavros/set_mode')
         try:
-            flightModeService = rospy.ServiceProxy('mavros/set_mode', mavros_msgs.srv.SetMode)
+            flightModeService = rospy.ServiceProxy('uav0/mavros/set_mode', mavros_msgs.srv.SetMode)
             flightModeService(custom_mode='ALTCTL')
-        except rospy.ServiceException, e:
-            print "service set_mode call failed: %s. Altitude Mode could not be set."%e
+        except rospy.ServiceException as e:
+            print("service set_mode call failed: %s. Altitude Mode could not be set."%e)
 
     def setPositionMode(self):
-        rospy.wait_for_service('mavros/set_mode')
+        rospy.wait_for_service('uav0/mavros/set_mode')
         try:
-            flightModeService = rospy.ServiceProxy('mavros/set_mode', mavros_msgs.srv.SetMode)
+            flightModeService = rospy.ServiceProxy('uav0/mavros/set_mode', mavros_msgs.srv.SetMode)
             flightModeService(custom_mode='POSCTL')
-        except rospy.ServiceException, e:
-            print "service set_mode call failed: %s. Position Mode could not be set."%e
+        except rospy.ServiceException as e:
+            print("service set_mode call failed: %s. Position Mode could not be set."%e)
 
     def setAutoLandMode(self):
-        rospy.wait_for_service('mavros/set_mode')
+        rospy.wait_for_service('uav0/mavros/set_mode')
         try:
-            flightModeService = rospy.ServiceProxy('mavros/set_mode', mavros_msgs.srv.SetMode)
+            flightModeService = rospy.ServiceProxy('uav0/mavros/set_mode', mavros_msgs.srv.SetMode)
             flightModeService(custom_mode='AUTO.LAND')
-        except rospy.ServiceException, e:
-               print "service set_mode call failed: %s. Autoland Mode could not be set."%e
+        except rospy.ServiceException as e:
+               print("service set_mode call failed: %s. Autoland Mode could not be set."%e)
 
 class Controller:
     # initialization method
@@ -120,30 +118,51 @@ class Controller:
         # update the setpoint message with the required altitude
         self.sp.position.z = self.ALT_SP
 
-        #Match the velocity of the flying craft
-        #self.sp.velocity.x = #x portion of velocity vector.
-        #self.sp.velocity.y = #y portion of velocity vector.
-
         # A Message for the current local position of the drone
         self.local_pos = Point(0.0, 0.0, 1.0)
 
-        self.yaw   = 0
-        self.pitch = 0
-        self.roll  = 0
+        self.yaw   = 0.0
+        self.pitch = 0.0
+        self.roll  = 0.0
 
         # initial values for setpoints
         self.sp.position.x = 0.0
         self.sp.position.y = 0.0
-        self.sp.yaw        = 0
-        self.sp.yaw_rate   = 0
+        self.sp.yaw        = 0.0
+        self.sp.yaw_rate   = 0.0
 
-        self.lat0 = 0
-        self.lon0 = 0
-        self.alt0 = 0
+        # Global2World Reference frame to convert mothership into chase ship local coordinates.
+        self.lat0 = 0.0
+        self.lon0 = 0.0
+        self.alt0 = 0.0
 
-        #initiate a Mothership
-        self.mShip = self.Mothership()
-        #intantiate an alg
+        # Also need to save xyz of origin or else conversions wont work.
+        self.x0 = 0.0
+        self.y0 = 0.0
+        self.z0 = 0.0
+
+        #Flag to set if global origin set
+        self.globalOrigin_Set = False
+
+        # Mothership global_loc
+        self.mship_lat = 0.0
+        self.mship_lon = 0.0
+        self.mship_h   = 0.0
+
+        # Mothership local_loc
+        self.mship_x   = 0.0
+        self.mship_y   = 0.0
+        self.mship_z   = 0.0
+
+        self.mship_x_avg   = 0.0
+        self.mship_y_avg   = 0.0
+        self.mship_z_avg   = 0.0
+
+
+        #Flag for when the mothership is located. This could get extremely complex in a real application but for now keeping it pretty simple
+        self.mship_located = False
+
+        #intantiate an alg class
         self.alg   = self.Algorithm()
 
     class Algorithm:
@@ -225,7 +244,7 @@ class Controller:
 
             #Rendezvous target, 2m distance from the ship. Position behind and below to match quads estimated pitch for speed.
             self.rs_target_x = -self.rendesvouz_dist * math.cos(self.pitch_2_match_vel)
-            self.rs_target_y =  0
+            self.rs_target_y =  0.0
             self.rs_target_z =  self.rendesvouz_dist * math.sin(self.pitch_2_match_vel)
 
             self.rs_target_x_clean = self.rs_target_x
@@ -235,7 +254,7 @@ class Controller:
             #Visual Servo X, Y & Z positions, start at 2 m dist off the mship. Is a func of mship speed and pithc
             #Below assumption is moving in x dir only
             self.vs_target_x = -self.rendesvouz_dist * math.cos(self.pitch_2_match_vel)
-            self.vs_target_y =  0 #eventually will 
+            self.vs_target_y =  0.0 #eventually will 
             self.vs_target_z =  self.rendesvouz_dist * math.sin(self.pitch_2_match_vel)
 
             #Save mixed target values as to not overwrite Visual or Rendezvous targets
@@ -243,53 +262,26 @@ class Controller:
             self.fade_target_y = 0.0
             self.fade_target_z = 0.0 
 
-
-    #Class to get the information from the Mothership in the sim.
-
-    class Mothership:
-        def __init__(self):
-            #Code for the sim to get the mothership xyz location... 
-            model_coordinates = rospy.ServiceProxy('/gazebo/get_model_state', GetModelState)
-            mShip_coordinates = model_coordinates("mothership", "")
-
-            #Initialize xyz to zero. Will update
-            self.lat = 0
-            self.lon = 0
-            self.alt = 0
-            self.x = 0
-            self.y = 0
-            self.z = 0
-
-            print str( str('Mothership found at, X: ') + str(self.x)+ str(' Y: ') + str(self.y)+ str(' Z: ') + str(self.z))
-
-        def get_sim_location(self,lat0,lon0,alt0):
-            #Just get the values from the ros connection to get the model state to use
-            model_coordinates = rospy.ServiceProxy('/gazebo/get_model_state', GetModelState)
-            mShip_coordinates = model_coordinates("mothership", "")
-
-            #Update the locations to the Mothership object
-            x = mShip_coordinates.pose.position.x
-            y = mShip_coordinates.pose.position.y
-            z = mShip_coordinates.pose.position.z
-
-            #ROS Coordinate frame is East(X) North(Y) Up(Z)
-            #This line is to sim what we would be given via UTM_GLOBAL_POSITION
-            (self.lat, self.lon, self.alt) = pm.enu2geodetic(x,y,z,lat0,lon0,alt0)
-
-            #Now convert lat lon alt to xyz
-            (self.x, self.y, self.z) = pm.geodetic2enu(self.lat, self.lon, self.alt, lat0, lon0, alt0)
-
-        def get_sim_world_location(self):
-            #This function will need to be updated to transfer from sim location to World Location
-            #Just get the values from the ros connection to get the model state to use
-            model_coordinates = rospy.ServiceProxy('/gazebo/get_model_state', GetModelState)
-            mShip_coordinates = model_coordinates("mothership", "")
-
-            #Update the locations to the Mothership object
-            self.x = mShip_coordinates.pose.position.x
-            self.y = mShip_coordinates.pose.position.y
-            self.z = mShip_coordinates.pose.position.z
 	# Callbacks
+    ## Mothership location callback
+    def updateMothershipLoc(self, msg):
+        if self.globalOrigin_Set:
+            self.mship_lat = msg.latitude
+            self.mship_lon = msg.longitude
+            self.mship_h   = msg.altitude
+
+            #Take the input lat lon h and lat0 lon0 h0 for the chase to get local coordinate conversion
+            (self.mship_x, self.mship_y, self.mship_z) = pm.geodetic2enu(self.mship_lat, self.mship_lon, self.mship_h, self.lat0, self.lon0, self.alt0)
+
+            #Add in origin offset. This is the step I had been forgetting that was causing alignment issues. 
+            self.mship_x = self.mship_x - self.x0
+            self.mship_y = self.mship_y - self.y0
+            self.mship_z = self.mship_z - self.z0
+
+        if(self.mship_located == False and self.globalOrigin_Set == True):
+            self.mship_located = True
+            print(str('Mothership found at, X:') + str(self.mship_x) + str(' Y: ') + str(self.mship_y) + str(' Z: ') + str(self.mship_z))
+        #print(('Mothership found at, X:') + str(self.mship_x) + ' Y: ' + str(self.mship_y) + ' Z: ' + str(self.mship_z))
     ## local position callback
     def orientation(self, msg):
         orientation_q = msg.orientation
@@ -313,16 +305,25 @@ class Controller:
         self.pitch = angles[1]
         self.yaw   = angles[2]
 
-        #print str('yaw: ' + str(self.yaw * 180 / 3.14) + ' pitch: ' + str(self.pitch * 180 / 3.14)+ ' roll: ' + str(self.roll * 180 / 3.14))
+
     ## Drone State callback
     def stateCb(self, msg):
         self.state = msg
 
     def initLatLon(self):
-        #Upon startup of controller set the initial latlon to be used to get xyz of mothership in future.
-        (self.lat0, self.lon0, self.alt0) = pm.enu2geodetic(self.local_pos.x, self.local_pos.y, self.local_pos.z, self.sp_glob.latitude, self.sp_glob.longitude, self.sp_glob.altitude)
+        if not self.globalOrigin_Set:
+            self.x0 = self.local_pos.x
+            self.y0 = self.local_pos.y
+            self.z0 = self.local_pos.z
+            #Upon startup of controller set the initial latlon to be used to get xyz of mothership in future.
+            (self.lat0, self.lon0, self.alt0) = pm.enu2geodetic(self.x0, self.y0, self.z0, self.sp_glob.latitude, self.sp_glob.longitude, self.sp_glob.altitude)
 
-        print 'Drone Initialized at Lat:' + str(self.lat0) +' Lon:' + str(self.lon0) + ' Alt:' + str(self.alt0)
+            print('Drone Initialized at Lat:' + str(self.lat0) +' Lon:' + str(self.lon0) + ' Alt:' + str(self.alt0))
+            print('Sim Origin at: ' + str(self.x0) + ' Y: ' + str(self.y0) + ' Z: ' + str(self.z0))
+            self.globalOrigin_Set = True
+        else:
+            print("Whoops! Global origin is already set... Warning!!! Warning!!!")
+    
     # Drone heading
     def updateHDG(self, msg):
         self.heading = msg.data
@@ -340,11 +341,9 @@ class Controller:
         self.sp_glob.altitude  = msg.altitude
 
     def updateRendesvousLoc(self):
-        self.mShip.get_sim_location(self.lat0, self.lon0, self.alt0)
-
-        self.alg.rs_target_x_clean = self.mShip.x + (2 * math.sin(0))# + (self.alg.rendesvouz_ff_gain * self.alg.mothership_vel)#Eventually will be heading
-        self.alg.rs_target_y_clean = self.mShip.y + (0) #Eventually will be heading 
-        self.alg.rs_target_z_clean = self.mShip.z - (2 * math.cos(self.alg.pitch_2_match_vel))
+        self.alg.rs_target_x_clean = self.mship_x# + (2 * math.sin(0))# + (self.alg.rendesvouz_ff_gain * self.alg.mothership_vel)#Eventually will be heading
+        self.alg.rs_target_y_clean = self.mship_y + (0) #Eventually will be heading 
+        self.alg.rs_target_z_clean = self.mship_z - (2 * math.cos(self.alg.pitch_2_match_vel))
 
         #Check error and integrate it.
         #x y plane error
@@ -367,9 +366,7 @@ class Controller:
         elif(self.alg.rendesvouz_int < -self.alg.rendesvouz_int_max):
             self.alg.rendesvouz_int = -self.alg.rendesvouz_int_max
 
-        print str(self.alg.rendesvouz_int)
         #if we have not encountered do not build any integrator.
-
 
         #Store error for last error
         self.alg.error_vec_last = error_vec
@@ -382,11 +379,22 @@ class Controller:
         #Stor the integrator to transsfer to the visual algorithm
         #self.alg.vis_int_x = self.alg.x_error_int
 
+        #Add in a moving average for each values for Weird Off Global Values
+        self.mship_x_avg = self.mship_x_avg - (self.mship_x_avg / 10)
+        self.mship_y_avg = self.mship_y_avg - (self.mship_y_avg / 10)
+        self.mship_z_avg = self.mship_z_avg - (self.mship_z_avg / 10)
+
+        self.mship_x_avg = self.mship_x_avg + (self.mship_x / 10)
+        self.mship_y_avg = self.mship_y_avg + (self.mship_y / 10)
+        self.mship_z_avg = self.mship_z_avg + (self.mship_z / 10)
         #Add integrator to target.
         #print x_error_int
-        self.alg.rs_target_x = self.mShip.x +  0.1 * error_vec + self.alg.x_error_int #+ (self.alg.rendesvouz_ff_gain * self.alg.mothership_vel)#Eventually will be including heading
-        self.alg.rs_target_y = self.mShip.y  #Eventually will be including heading 
-        self.alg.rs_target_z = self.mShip.z - (2 * math.cos(self.alg.pitch_2_match_vel))        
+        self.alg.rs_target_x = self.mship_x_avg #+  0.1 * error_vec + self.alg.x_error_int #+ (self.alg.rendesvouz_ff_gain * self.alg.mothership_vel)#Eventually will be including heading
+        self.alg.rs_target_y = self.mship_y_avg  #Eventually will be including heading 
+        self.alg.rs_target_z = self.mship_z_avg - 2 #(2 * math.cos(self.alg.pitch_2_match_vel))   
+
+        #Trying to Debug
+        print('Going to X: ' + str(self.alg.rs_target_x) + ' Y: ' + str(self.alg.rs_target_y) + ' Z: ' + str(self.alg.rs_target_z))     
 
     def updateVisErr(self, cam2aruco):
         d = self.alg.vis_app_dist
@@ -396,8 +404,8 @@ class Controller:
         z_vis = cam2aruco[2]
 
         #Calculate x y z error of the quad relative to the target.
-        self.alg.x_vis_err = (d * math.sin(self.alg.pitch_2_match_vel)) + x_vis #Eventually will add heading
-        self.alg.y_vis_err = (0) + y_vis#Eventually will be heading 
+        self.alg.x_vis_err = (0) + x_vis #(d * math.sin(self.alg.pitch_2_match_vel)) + x_vis #Eventually will add heading
+        self.alg.y_vis_err = (0) + y_vis #Eventually will be heading 
         self.alg.z_vis_err = (d * math.cos(self.alg.pitch_2_match_vel)) - z_vis
 
         #print str('x_vis_err:' + str(self.alg.x_vis_err))
@@ -466,8 +474,6 @@ class Controller:
                 self.alg.vis_app_dist = self.alg.vis_target_dist #Stop at the target distance. So we aren't kicked out of the visual algorithm
 
     def updateVisLoc(self, img):
-        self.mShip.get_sim_location(self.lat0, self.lon0, self.alt0)
-
         (corners, ids, rejected) = cv2.aruco.detectMarkers(img, self.alg.ARUCO_DICT, parameters=self.alg.ARUCO_PARAMS)
 
         if ids is not None:
@@ -504,7 +510,7 @@ class Controller:
                     self.alg.vis_int_y = self.alg.vis_int_y + frame_vis_int_y
                     self.alg.vis_int_z = self.alg.vis_int_z + frame_vis_int_z
 
-                    print str(self.alg.vis_int_x)
+                    print(str(self.alg.vis_int_x))
                     #Check max integrator values
                     if(self.alg.vis_int_x > self.alg.vis_int_max):
                         self.alg.vis_int_x = self.alg.vis_int_max
@@ -546,8 +552,6 @@ class Controller:
 
     def cam2Local(self, cam_pts):
         #Here in the function build the Rot matrix of the quadcopter, take XYZ points from camera, [y x z 1] format. Rot_Mat * Cam_Pts will give Aruco wrld pts
-        
-
         roll  = self.roll
         pitch = self.pitch
         yaw   = self.yaw 
@@ -622,10 +626,9 @@ class Controller:
 
                 #Printing for debug purposes
                 loc_string = str('yaw: ') + str(rvecs[0][0][2]) + str(' z-dist: ') + str(tvecs[0][0][2])
-                #print loc_string
+                print(loc_string)
                 cnt = cnt + 1
                 
-
         cv2.imshow('cv_img', grey_im)
         cv2.waitKey(2)
 
@@ -820,3 +823,4 @@ class Controller:
             return printstr
         else:
             return printheader
+
