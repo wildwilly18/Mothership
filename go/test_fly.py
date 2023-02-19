@@ -37,12 +37,11 @@ def main():
     # Setpoint publisher    
     sp_pub = rospy.Publisher('mavros/setpoint_raw/local', PositionTarget, queue_size=1)
 
-    print 'Pub Sub setup. Trying to arm'
+    print('Pub Sub setup. Trying to arm')
     # Make sure the drone is armed
     while not cnt.state.armed:
         modes.setArm()
-        print 'armed'
-        cnt.printLoc()
+        print('armed')
         rate.sleep()
 
     # set in takeoff mode and takeoff to default altitude (3 m)
@@ -69,8 +68,8 @@ def main():
         x_cmd = 0
         y_cmd = 0
         z_cmd = 8
-    	cnt.updateSp(x_cmd, y_cmd, z_cmd)
-    	sp_pub.publish(cnt.sp)   
+        cnt.updateSp(x_cmd, y_cmd, z_cmd)
+        sp_pub.publish(cnt.sp)   
         ii = ii + 1
         if ii > 1000:
             break
