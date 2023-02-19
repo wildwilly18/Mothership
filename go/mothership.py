@@ -9,6 +9,9 @@ import time
 import tf.transformations
 import pymap3d as pm
 
+# Import datetime to build string for the log file title
+import datetime
+
 # 3D point & Stamped Pose msgs
 from geometry_msgs.msg       import Point, PoseStamped, Twist
 from sensor_msgs.msg         import NavSatFix, Imu
@@ -282,6 +285,8 @@ class Controller:
             self.mship_lon = msg.longitude
             self.mship_h   = msg.altitude
 
+            #print("Mothership @ Lat: " + str(self.mship_lat) + " Lon: " + str(self.mship_lon))
+
             #Take the input lat lon h and lat0 lon0 h0 for the chase to get local coordinate conversion
             (self.mship_x, self.mship_y, self.mship_z) = pm.geodetic2enu(self.mship_lat, self.mship_lon, self.mship_h, self.lat0, self.lon0, self.alt0)
 
@@ -321,13 +326,12 @@ class Controller:
         self.pitch = angles[1]
         self.yaw   = angles[2]
 
-
     ## Drone State callback
     def stateCb(self, msg):
         self.state = msg
 
     def initLatLon(self):
-        if not self.globalOrigin_Set:
+        if not self.globalOrigin_Set and (self.sp_glob.latitude > 0):
             self.x0 = self.local_pos.x
             self.y0 = self.local_pos.y
             self.z0 = self.local_pos.z
@@ -338,7 +342,7 @@ class Controller:
             print('Sim Origin at: ' + str(self.x0) + ' Y: ' + str(self.y0) + ' Z: ' + str(self.z0))
             self.globalOrigin_Set = True
         else:
-            print("Whoops! Global origin is already set... Warning!!! Warning!!!")
+            print("Can't set global origin yet!")
     
     # Drone heading
     def updateHDG(self, msg):
@@ -356,12 +360,12 @@ class Controller:
         self.sp_glob.longitude = msg.longitude
         self.sp_glob.altitude  = msg.altitude
 
-        #print("lat: " + str(self.sp_glob.latitude) + " lon: " + str(self.sp_glob.longitude))
+        #print("Tracking @ Lat: " + str(self.sp_glob.latitude) + " Lon: " + str(self.sp_glob.longitude))
 
     def updateRendesvousLoc(self):
-        self.alg.rs_target_x_clean = self.mship_x# + (2 * math.sin(0))# + (self.alg.rendesvouz_ff_gain * self.alg.mothership_vel)#Eventually will be heading
-        self.alg.rs_target_y_clean = self.mship_y + (0) #Eventually will be heading 
-        self.alg.rs_target_z_clean = self.mship_z - (2 * math.cos(self.alg.pitch_2_match_vel))
+        self.alg.rs_target_x_clean = self.mship_x
+        self.alg.rs_target_y_clean = self.mship_y  
+        self.alg.rs_target_z_clean = self.mship_z - self.alg.rendesvouz_dist
 
         #Check error and integrate it.
         #x y plane error
@@ -407,9 +411,9 @@ class Controller:
         self.mship_z_avg = self.mship_z_avg + (self.mship_z / 10)
         #Add integrator to target.
         #print x_error_int
-        self.alg.rs_target_x = self.mship_x_avg #+  0.1 * error_vec + self.alg.x_error_int #+ (self.alg.rendesvouz_ff_gain * self.alg.mothership_vel)#Eventually will be including heading
-        self.alg.rs_target_y = self.mship_y_avg  #Eventually will be including heading 
-        self.alg.rs_target_z = self.mship_z_avg - 2 #(2 * math.cos(self.alg.pitch_2_match_vel))   
+        self.alg.rs_target_x = self.mship_x_avg 
+        self.alg.rs_target_y = self.mship_y_avg  
+        self.alg.rs_target_z = self.mship_z_avg - self.alg.rendesvouz_dist
 
         #Trying to Debug
         #print('Going to X: ' + str(self.alg.rs_target_x) + ' Y: ' + str(self.alg.rs_target_y) + ' Z: ' + str(self.alg.rs_target_z))     
@@ -786,14 +790,20 @@ class Controller:
     def logData(self, header=None):
         elapsed_time = time.clock()
         #If the user calls for header return the header or else just return the data. 
-        printheader = 'Elapsed_Time local_X local_Y local_Z R_target_X R_target_Y R_target_Z X_err_integrator Y_err_integrator visual_mode visual_first_enc Vis_counter Vis_last Vis_Consecutive ' +\
+        printheader = 'Elapsed_Time local_X local_Y local_Z Lat_C Lon_C Alt_C Lat_M Lon_M Alt_M R_target_X R_target_Y R_target_Z X_err_integrator Y_err_integrator visual_mode visual_first_enc Vis_counter Vis_last Vis_Consecutive ' +\
             'Rendesvous_mode Algo_counter Algo_last Algo_consecutive Vis_app_dist Vis_app_cnt Vis_app_last Vis_app_consecutive quad_radius quad_safe x_vis_err y_vis_err z_vis_err vis_int_x' +\
                 'vis_int_y vis_int_z vis_der_x vis_der_y\n'
-        printstr = '{0:.3f} {1:.3f} {2:.3f} {3:.3f} {4:.3f} {5:.3f} {6:.3f} {7:.3f} {8:.3f} {9} {10} {11} {12} {13} {14} {15} {16} {17} {18:.3f} {19} {20} {21} {22:.3f} {23:.3f} {24:.3f} {25} {26:.3f} {27:.3f} {28:.3f} {29:.3f} {30:.3f} {31:.3f} {32:.3f} {33:.3f} {34:.3f} {35:.3f} {36:.3f} {37:.3f} {38:.3f} {39:.3f} {40:.3f} {41:.3f} {42:.3f} {43:.3f}\n'.format(\
+        printstr = '{0:.3f} {1:.3f} {2:.3f} {3:.3f} {4} {5} {6} {7} {8} {9} {10:.3f} {11:.3f} {12:.3f} {13:.3f} {14:.3f} {15} {16} {17} {18} {19} {20} {21} {22} {23} {24:.3f} {25} {26} {27} {28:.3f} {29:.3f} {30:.3f} {31} {32:.3f} {33:0.3f} {34:.3f} {35:.3f} {36:.3f} {37:.3f} {38:.3f} {39:.3f} {40:.3f} {41:.3f} {42:.3f} {43:.3f} {44:.3f} {45:.3f} {46:.3f} {47:.3f} {48:.3f} {49:.3f}\n'.format(\
             elapsed_time,\
             self.local_pos.x, \
             self.local_pos.y,\
             self.local_pos.z,\
+            self.sp_glob.latitude,\
+            self.sp_glob.longitude,\
+            self.sp_glob.altitude,\
+            self.mship_lat,\
+            self.mship_lon,\
+            self.mship_h,\
             self.alg.rs_target_x_clean,\
             self.alg.rs_target_y_clean,\
             self.alg.rs_target_z_clean,\

@@ -5,6 +5,7 @@ import rospy
 import cv2
 import numpy as np
 import time
+import datetime
 
 def main():
 
@@ -45,14 +46,38 @@ def main():
 
     # Setpoint publisher    
     #sp_pub = rospy.Publisher('uav0/mavros/setpoint_raw/local', PositionTarget, queue_size=1)
-    cnt.initLatLon()
     rate.sleep()
 
+    # Get the current date and time
+    now = datetime.datetime.now()
+
+    # Format the date and time as a string
+    log_string = now.strftime("Location_Log_%B_%d_%Y_%H_%M_%S")
+
+    #Open up a file to write the data too.
+    logFile = open(log_string, 'w')
+
+    printheader = cnt.logData('header')
+
+    logFile.writelines(printheader)
+
     print("Initializing Lat Lon Origin:")
+    while not cnt.globalOrigin_Set:
+        cnt.initLatLon()
+        if cnt.globalOrigin_Set:
+            print("Global origin set")
+
+    z = 0
     while (True):
 
+        z = z + 1
         cnt.updateRendesvousLoc()
-        print('X Error: ' + str(cnt.alg.rs_target_x - cnt.local_pos.x) + ' Y Error: ' + str(cnt.alg.rs_target_y - cnt.local_pos.y) + ' Z Error: ' + str(cnt.alg.rs_target_z - cnt.local_pos.z))
+        if(z%10 == 0):
+            print('X Error: ' + str(cnt.alg.rs_target_x - cnt.local_pos.x) + ' Y Error: ' + str(cnt.alg.rs_target_y - cnt.local_pos.y) + ' Z Error: ' + str(cnt.alg.rs_target_z - cnt.local_pos.z))
+
+        loggedData = cnt.logData()
+        #print loggedData
+        logFile.writelines(loggedData)
         rate.sleep()
 
 
