@@ -48,6 +48,9 @@ def main():
     modes.setPositionMode()
     rate.sleep()
 
+    print('Initializing Lat Lon')
+    cnt.initLatLon()
+
     x_cmd = cnt.local_pos.x
     y_cmd = cnt.local_pos.y
     z_cmd = cnt.local_pos.y
@@ -87,11 +90,14 @@ def main():
                   print('Take-off finished')
             
             rate.sleep()
-            
-        while(cnt.alg.takeoff_finished):
-            x_cmd = 5.0
-            y_cmd = 0.0
-            z_cmd = 7.0
+
+        while(cnt.alg.takeoff_finished and cnt.mship_located):
+            cnt.updateRendesvousLoc()
+
+            x_cmd = cnt.alg.rs_target_x
+            y_cmd = cnt.alg.rs_target_y
+            z_cmd = cnt.alg.rs_target_z
+
             cnt.updateSp(x_cmd, y_cmd, z_cmd)
             sp_pub.publish(cnt.sp)
             rate.sleep()

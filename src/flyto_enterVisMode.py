@@ -48,6 +48,9 @@ def main():
     modes.setPositionMode()
     rate.sleep()
 
+    print('Initializing Lat Lon')
+    cnt.initLatLon()
+
     x_cmd = cnt.local_pos.x
     y_cmd = cnt.local_pos.y
     z_cmd = cnt.local_pos.y
@@ -87,12 +90,26 @@ def main():
                   print('Take-off finished')
             
             rate.sleep()
+
+        while(cnt.alg.takeoff_finished and cnt.mship_located):
+            #Rendesvouz mode
+            cnt.updateRendesvousLoc()
+
+            #Determine if the Aircraft is at Rendesvous Location.
+            cnt.determineAtRendesvous()
+
+            #Look for an ID and start tracking image confidence
+            cnt.determineVisualAlg(cnt.alg.img)
+
+            #Update the drone with the set point target
+            cnt.updateRendesvousLoc()
+            cnt.updateSp(cnt.alg.rs_target_x, cnt.alg.rs_target_y, cnt.alg.rs_target_z)
             
-        while(cnt.alg.takeoff_finished):
-            x_cmd = 5.0
-            y_cmd = 0.0
-            z_cmd = 7.0
-            cnt.updateSp(x_cmd, y_cmd, z_cmd)
+            #Update the set point of the quad rotor.
+            sp_pub.publish(cnt.sp)
+            #Check if visual mode can be entered. If so function will update object with visual mode true
+            cnt.determineEnterVisualMode()
+
             sp_pub.publish(cnt.sp)
             rate.sleep()
 
