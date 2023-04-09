@@ -37,7 +37,7 @@ def main():
     rospy.Subscriber('uav0/mavros/global_position/compass_hdg', Float64, cnt.updateHDG)
 
     # Subscribe to the camera image we want to take a look at
-    rospy.Subscriber('iris0/usb_cam/image_raw/compressed', CompressedImage, cnt.locateAruco, queue_size=10)
+    rospy.Subscriber('iris0/usb_cam/image_raw/compressed', CompressedImage, cnt.locateAruco, queue_size=5)
 
     # Subscribe to mothership drone's global position, update callback fnc
     rospy.Subscriber('uav1/mavros/global_position/global', NavSatFix, cnt.updateMothershipLoc)
@@ -73,6 +73,7 @@ def main():
 
     print('ARMED')
     print('TAKING OFF')
+    cnt.alg.takeoff_finished = 0
     # ROS main loop
     while not rospy.is_shutdown():
         #Takeoff State
@@ -87,13 +88,14 @@ def main():
 
             #Takeoff position reached.
             if(abs(z_cmd - cnt.local_pos.z) < 0.2 ):
+                  cnt.alg.rendesvous_mode = 1
                   cnt.alg.takeoff_finished = True
                   print('Take-off finished')
             
             rate.sleep()
 
         #Rendesvous State
-        while(cnt.alg.takeoff_finished and cnt.mship_located):
+        while(cnt.alg.takeoff_finished and cnt.mship_located and not cnt.alg.at_rendesvous):
             cnt.updateRendesvousLoc()
 
             x_cmd = cnt.alg.rs_target_x
@@ -105,7 +107,26 @@ def main():
             cnt.updateSp(x_cmd, y_cmd, z_cmd)
             sp_pub.publish(cnt.sp)
             rate.sleep()
+        
+        #Visual Tag Identification State
+        while(cnt.alg.rendesvous_mode and cnt.alg.at_rendesvous and not cnt.alg.visual_mode):
+            cnt.determineVisualAlg()
+            cnt.checkMarkerSetMarkerRendesvouzPoint()
+            cnt.determineEnterVisualMode()
 
+            x_cmd = cnt.alg.rs_target_x
+            y_cmd = cnt.alg.rs_target_y
+            z_cmd = cnt.alg.rs_target_z
+
+            cnt.updateSp(x_cmd, y_cmd, z_cmd)
+            sp_pub.publish(cnt.sp)
+            rate.sleep()
+
+        #State for visual mode, here we command velocities and slowly move up to the marker until within range
+        while(cnt.alg.visual_mode):
+            
+
+        
         
 if __name__ == '__main__':
 	try:
