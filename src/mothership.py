@@ -111,7 +111,17 @@ class Controller:
         self.sp_glob.longitude = 0
         self.sp_glob.altitude  = 0
         self.sp_glob.yaw       = 0
-        
+
+        # Instantiate a "mavros/setpoint_velocity/cmd_vel_unstamped"
+        self.sp_vel = Twist()
+        self.sp_vel.linear.x = 0.0
+        self.sp_vel.linear.y = 0.0
+        self.sp_vel.linear.z = 0.0
+        #Angular Commands.. we only will cmd z need all though.
+        self.sp_vel.angular.x = 0.0
+        self.sp_vel.angular.y = 0.0
+        self.sp_vel.angular.z = 0.0
+
         # We will fly at a fixed altitude for now
         # Altitude setpoint, [meters]
         self.ALT_SP = 10.0
@@ -317,6 +327,12 @@ class Controller:
         self.sp.position.z = z_des
         self.sp.yaw        = yaw
 
+    def updateVel(self, x_vel, y_vel, z_vel, yaw_rate):
+        self.sp_vel.linear.x = x_vel
+        self.sp_vel.linear.y = y_vel
+        self.sp_vel.linear.z = z_vel
+        self.sp_vel.angular.z = yaw_rate
+
     def globalLoc(self, msg):
         self.sp_glob.latitude  = msg.latitude
         self.sp_glob.longitude = msg.longitude
@@ -329,6 +345,11 @@ class Controller:
 
         #Trying to Debug
         #print('Going to X: ' + str(self.alg.rs_target_x) + ' Y: ' + str(self.alg.rs_target_y) + ' Z: ' + str(self.alg.rs_target_z))     
+    def updateVisualServoCMD(self, x_error, y_error, z_error, yaw_error):
+        self.sp_vel.linear.x = self.saturateValue((x_error*0.5), -0.7, 0.7)
+        self.sp_vel.linear.y = self.saturateValue((y_error*0.5), -0.7, 0.7)
+        self.sp_vel.linear.z = self.saturateValue((z_error*0.8), -0.5, 0.5)
+        self.sp_vel.angular.z = self.saturateValue((yaw_error*0.002), -0.5, 0.5)
 
     def updateVisErr(self, cam2aruco):
         d = self.alg.vis_app_dist
@@ -356,7 +377,7 @@ class Controller:
         if(safe_radius < (2 * quad_rad)):
             safe_radius = 2 * quad_rad
 
-        err_mag = math.sqrt((self.alg.x_vis_err ** 2) + (self.alg.y_vis_err ** 2) + (self.alg.z_vis_err ** 2))
+        err_mag = math.sqrt((self.alg.x_vis_err ** 2) + (self.alg.y_vis_err ** 2) + ((self.alg.z_vis_err - self.alg.vis_app_dist) ** 2))
 
         #print str("Error Mag: " + str(err_mag) + " safe_radius: " + str(safe_radius))
         self.alg.safe_radius = safe_radius
@@ -605,7 +626,6 @@ class Controller:
         else:
             self.alg.at_rendesvous = 0
 
-
     def determineVisualAlg(self):
             if(self.mship_visible):
                 self.alg.visual_first_encounter = 1
@@ -645,7 +665,6 @@ class Controller:
                     self.alg.vis_last        =  0
                     self.alg.vis_consecutive =  1
                     self.alg.vis_counter = self.alg.vis_counter - (0.001 * self.alg.vis_consecutive**1.3)
-
     
     def checkMarkerSetMarkerRendesvouzPoint(self):
         if(self.mship_visible):
@@ -657,8 +676,7 @@ class Controller:
 
             self.alg.x_vis_offset = x_offset
             self.alg.y_vis_offset = y_offset
-            print('Offset X: ' + str(self.alg.x_vis_offset) + ' Offset Y: ' + str(self.alg.y_vis_offset))
-
+            #print('Offset X: ' + str(self.alg.x_vis_offset) + ' Offset Y: ' + str(self.alg.y_vis_offset))
 
     def determineEnterVisualMode(self):
         #Check the counters to see if at algorithm location and visual target identified
@@ -734,4 +752,13 @@ class Controller:
             return printstr
         else:
             return printheader
+    
+    def saturateValue(self, value, saturate_min, saturate_max):
+        if(value > saturate_max):
+            value = saturate_max
+        elif(value < saturate_min):
+            value = saturate_min
+        
+        return value
+        
 

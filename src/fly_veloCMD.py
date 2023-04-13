@@ -42,7 +42,7 @@ def main():
     # Subscribe to mothership drone's global position, update callback fnc
     rospy.Subscriber('uav1/mavros/global_position/global', NavSatFix, cnt.updateMothershipLoc)
 
-    # Setpoint publisher    
+    # Setpoint location publisher    
     sp_pub = rospy.Publisher('uav0/mavros/setpoint_raw/local', PositionTarget, queue_size=1)
 
     # Setpoint velocity publisher
@@ -77,76 +77,18 @@ def main():
     print('ARMED')
     print('TAKING OFF')
     cnt.alg.takeoff_finished = 0
+
     # ROS main loop
     while not rospy.is_shutdown():
-        #Takeoff State
-        while not(cnt.alg.takeoff_finished):
-            #Initialize takeoff location
-            x_cmd = cnt.local_pos.x
-            y_cmd = cnt.local_pos.y
-            z_cmd = cnt.alg.takeoff_z
-
-            cnt.updateSp(x_cmd, y_cmd, z_cmd)
-            sp_pub.publish(cnt.sp)
-
-            #Takeoff position reached.
-            if(abs(z_cmd - cnt.local_pos.z) < 0.2 ):
-                  cnt.alg.rendesvous_mode = 1
-                  cnt.alg.takeoff_finished = True
-                  print('Take-off finished')
             
-            rate.sleep()
-
-        #Rendesvous State
-        while(cnt.alg.takeoff_finished and cnt.mship_located and not cnt.alg.at_rendesvous):
-            cnt.updateRendesvousLoc()
-
-            x_cmd = cnt.alg.rs_target_x
-            y_cmd = cnt.alg.rs_target_y
-            z_cmd = cnt.alg.rs_target_z
-
-            cnt.determineAtRendesvous()
-
-            cnt.updateSp(x_cmd, y_cmd, z_cmd)
-            sp_pub.publish(cnt.sp)
-            rate.sleep()
-        
-        #Visual Tag Identification State
-        while(cnt.alg.rendesvous_mode and cnt.alg.at_rendesvous and not cnt.alg.visual_mode):
-            cnt.determineVisualAlg()
-            cnt.checkMarkerSetMarkerRendesvouzPoint()
-            cnt.determineEnterVisualMode()
-
-            x_cmd = cnt.alg.rs_target_x
-            y_cmd = cnt.alg.rs_target_y
-            z_cmd = cnt.alg.rs_target_z
-
-            cnt.updateSp(x_cmd, y_cmd, z_cmd)
-            sp_pub.publish(cnt.sp)
-            rate.sleep()
-
-        #State for visual mode, here we command velocities and slowly move up to the marker until within range
-        while(cnt.alg.visual_mode):
-            cnt.determineVisualAlg()
-            cnt.determineExitVisualMode()
-            cnt.checkVisAppInRadius()
-            cnt.updateVisualDist()
-
-            vel_cmd_x   = -cnt.alg.x_vis_err
-            vel_cmd_y   = -cnt.alg.y_vis_err
-            vel_cmd_z   = cnt.alg.z_vis_err - cnt.alg.vis_app_dist
-            vel_cmd_yaw = cnt.alg.yaw_vis_err
-
-            print('Z Velocity Command: ' + str(vel_cmd_z) + ' Vis App Dist: ' + str(cnt.alg.vis_app_dist))
-            cnt.updateVisualServoCMD(vel_cmd_x, vel_cmd_y, vel_cmd_z, -vel_cmd_yaw)
+            cnt.updateVel(0, 0, 0.5, 0.5)
             sp_vel.publish(cnt.sp_vel)
             rate.sleep()
+          
 
-        
-        
+
 if __name__ == '__main__':
 	try:
 		main()
 	except rospy.ROSInterruptException:
 		pass
-
