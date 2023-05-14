@@ -186,10 +186,10 @@ class Controller:
         def __init__(self):     
             # For algorithm store which state of algorithm Quad is in. May need multiple aruco dictionaries for big, med, small Tags
             #Generated and this link https://chev.me/arucogen/
-            #Image Algorithm info
+            #Image Algorithm info camera.
             self.ARUCO_DICT    = cv2.aruco.Dictionary_get(cv2.aruco.DICT_6X6_100) #Initialize the Aruco Dictionary that the controller will use.
             self.ARUCO_PARAMS  = cv2.aruco.DetectorParameters_create()
-            self.camera_matrix = np.array([[277.191356, 0, 159.5],[0, 277.191356, 119.5], [0, 0, 1]]) #Camera matrix for simulated camera. From fpv_cam.sdf
+            self.camera_matrix = np.array([[551.1439, 0, 331.7447],[0, 551.7652, 235.9727], [0, 0, 1]]) #Camera matrix for simulated camera. From fpv_cam.sdf
             self.camera_dist   = np.array([0, 0, 0, 0]) #Distortion Coefficients for the simlated camera. set to 0 in sim. From fpv_cam.sdf
             self.img           = None
 
@@ -216,7 +216,7 @@ class Controller:
             self.algo_consecutive     =      0    #Track consecutive frames of within error range
             self.algo_counter_sat     =   1000    #Saturation value for position
             self.algorithm_threshold  =    750    #Value for algorithm thresholds
-            self.rendesvouz_dist      =    2.5    #distance in M that the rendesvouz point will be
+            self.rendesvouz_dist      =    2.3    #distance in M that the rendesvouz point will be
             self.quad_radius          =    0.1    #Uncertainty sphere radius of the quadrotor
             self.safe_radius          =    1.2    #Store the safe radius that is calculated for the visual algorithm
             self.err_mag              =    0.0    #Err mag calculated for the visual algorithm
@@ -377,7 +377,7 @@ class Controller:
         if(safe_radius < (2 * quad_rad)):
             safe_radius = 2 * quad_rad
 
-        err_mag = math.sqrt((self.alg.x_vis_err ** 2) + (self.alg.y_vis_err ** 2) + ((self.alg.z_vis_err - self.alg.vis_app_dist) ** 2))
+        err_mag = math.sqrt((self.alg.x_vis_err ** 2) + (self.alg.y_vis_err ** 2) + ((self.alg.z_vis_err) ** 2))
 
         #print str("Error Mag: " + str(err_mag) + " safe_radius: " + str(safe_radius))
         self.alg.safe_radius = safe_radius
@@ -429,7 +429,12 @@ class Controller:
                 self.alg.vis_app_dist = self.alg.vis_target_dist #Stop at the target distance. So we aren't kicked out of the visual algorithm
 
     def updateVisLoc(self, img):
-        (corners, ids, rejected) = cv2.aruco.detectMarkers(img, self.alg.ARUCO_DICT, parameters=self.alg.ARUCO_PARAMS)
+
+        np_arr = np.fromstring(img.data, np.uint8)
+        image_np = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+
+
+        (corners, ids, rejected) = cv2.aruco.detectMarkers(image_np, self.alg.ARUCO_DICT, parameters=self.alg.ARUCO_PARAMS)
 
         if ids is not None:
             for id in ids:
@@ -461,9 +466,14 @@ class Controller:
                     self.alg.vs_target_y = self.local_pos.y - (self.alg.y_vis_err * self.alg.vis_P)
                     self.alg.vs_target_z = self.local_pos.z - (self.alg.z_vis_err * self.alg.vis_P)
 
-                    #print str("X Loc:" + str(self.local_pos.x) + " X Err:" + str(self.alg.x_vis_err))
-                    #print str("Z Loc:" + str(self.local_pos.z) + " Z Err:" + str(self.alg.z_vis_err) + " D: " + str(self.alg.vis_app_dist))
+                    self.mship_visible = 1
 
+        else:
+            print('Tag not found')
+            self.mship_not_visible_count = self.mship_not_visible_count + 1
+            if(self.mship_not_visible_count > self.mship_debounce and self.mship_visible):
+                self.mship_visible = 0
+            
     def fadeToVisLoc(self):
         #Take the Two types and fade and calculate the fade value.
         self.alg.fade_target_x = self.alg.rs_target_x * (1 - self.alg.mode_fade_increment) + self.alg.vs_target_x * (self.alg.mode_fade_increment)
@@ -497,31 +507,8 @@ class Controller:
         self.alg.img = grey_im
 
         #print image for viewing purposes
-        cv2.imshow('cv_img', grey_im)                    
-        cv2.waitKey(2)
-
-    def locateArucoID(self, img, id):
-        np_arr = np.fromstring(img.data, np.uint8)
-        image_np = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
-
-        #Convert image to grey
-        grey_im  = cv2.cvtColor(image_np, cv2.COLOR_BGR2GRAY)
-        (corners, ids, rejected) = cv2.aruco.detectMarkers(grey_im, self.alg.ARUCO_DICT, parameters=self.alg.ARUCO_PARAMS)
-
-        if ids is not None:
-            for id in ids:
-                #Set the length of the ID detected.
-                if(id[0] == 10):
-                    #Get the rotation vec and translation vec of the camera to the aruco I believe. can use this to control the quad.
-                    rvecs, tvecs = cv2.aruco.estimatePoseSingleMarkers(corners[cnt], aruco_len, self.alg.camera_matrix, self.alg.camera_dist)
-
-        #Printing for debug purposes
-        loc_string = str('yaw: ') + str(rvecs[0][0][2]) + str(' z-dist: ') + str(tvecs[0][0][2])
-        #print loc_string
-        cnt = cnt + 1
-        err = [rvecs[0][0][2], tvecs[0][0][2]]
-        
-        return err
+        #cv2.imshow('cv_img', grey_im)                    
+        #cv2.waitKey(2)
 
     def locateAruco(self, img):
         np_arr = np.fromstring(img.data, np.uint8)
@@ -542,7 +529,7 @@ class Controller:
                     aruco_len = 0.25
 
                 #Get the rotation vec and translation vec of the camera to the aruco I believe. can use this to control the quad.
-                (rvecs, tvecs, _objPoints) = cv2.aruco.estimatePoseSingleMarkers(corners[cnt], aruco_len, self.alg.camera_matrix, self.alg.camera_dist)
+                (rvecs, tvecs) = cv2.aruco.estimatePoseSingleMarkers(corners[cnt], aruco_len, self.alg.camera_matrix, self.alg.camera_dist)
 
                 #Find the tag. Store the xyz error and yaw offset
                 self.alg.x_vis_err   = -tvecs[0][0][1]
@@ -553,18 +540,20 @@ class Controller:
                 self.mship_not_visible_count = 0
 
                 #Printing for debug purposes
-                loc_string = str('yaw: ') + str(rvecs[0][0][2]) + str(' z-dist: ') + str(tvecs[0][0][2])
-                #print(loc_string)
+                loc_string = str('X-Dist: ') + str(self.alg.x_vis_err) + str(' Y-Dist: ') + str(self.alg.y_vis_err) + str(' z-dist: ') + str(self.alg.z_vis_err)
+                print(loc_string)
                 cnt = cnt + 1
         else:
             if(self.mship_not_visible_count > self.mship_debounce and self.mship_visible):
                 self.mship_visible = 0
-                print('Mship no longer visible')
+                print('Mship not visible')
+
+            print('tag not visible')
 
             self.mship_not_visible_count = self.mship_not_visible_count + 1
 
-        cv2.imshow('cv_img', grey_im)
-        cv2.waitKey(2)
+        #cv2.imshow('cv_img', grey_im)
+        #cv2.waitKey(2)
 
     def determineAtRendesvous(self):
         #At Rendesvouz if Quadrotor is withing 0.5m error in x,y,z count up.
@@ -699,19 +688,14 @@ class Controller:
     def logData(self, header=None):
         elapsed_time = time.clock()
         #If the user calls for header return the header or else just return the data. 
-        printheader = 'Elapsed_Time local_X local_Y local_Z R_target_X R_target_Y R_target_Z X_err_integrator Y_err_integrator visual_mode visual_first_enc Vis_counter Vis_last Vis_Consecutive ' +\
-            'Rendesvous_mode Algo_counter Algo_last Algo_consecutive Vis_app_dist Vis_app_cnt Vis_app_last Vis_app_consecutive quad_radius quad_safe x_vis_err y_vis_err z_vis_err vis_int_x' +\
-                'vis_int_y vis_int_z vis_der_x vis_der_y\n'
-        printstr = '{0:.3f} {1:.3f} {2:.3f} {3:.3f} {4:.3f} {5:.3f} {6:.3f} {7:.3f} {8:.3f} {9} {10} {11} {12} {13} {14} {15} {16} {17} {18:.3f} {19} {20} {21} {22:.3f} {23:.3f} {24:.3f} {25} {26:.3f} {27:.3f} {28:.3f} {29:.3f} {30:.3f} {31:.3f} {32:.3f} {33:.3f} {34:.3f} {35:.3f} {36:.3f} {37:.3f} {38:.3f} {39:.3f} {40:.3f} {41:.3f} {42:.3f} {43:.3f}\n'.format(\
+        printheader = 'Elapsed_Time local_X local_Y local_Z visual_mode visual_first_enc Vis_counter Vis_last Vis_Consecutive ' +\
+            'Rendesvous_mode Algo_counter Algo_last Algo_consecutive Vis_app_dist Vis_app_cnt Vis_app_last Vis_app_consecutive quad_radius quad_safe x_vis_err y_vis_err z_vis_err '+\
+            'x_setpoint y_setpoint z_setpoint \n'
+        printstr = '{0:.3f} {1:.3f} {2:.3f} {3:.3f} {4} {5} {6} {7} {8} {9} {10} {11} {12} {13:.3f} {14} {15} {16} {17:.3f} {18:.3f} {19:.3f} {20} {21:.3f} {22:.3f} {23:.3f} {24:.3f} {25:.3f} {26:.3f} {27:.3f} {28:.3f} {29:.3f} {30:.3f}\n'.format(\
             elapsed_time,\
             self.local_pos.x, \
             self.local_pos.y,\
             self.local_pos.z,\
-            self.alg.rs_target_x_clean,\
-            self.alg.rs_target_y_clean,\
-            self.alg.rs_target_z_clean,\
-            self.alg.x_error_int,\
-            self.alg.y_error_int,\
             self.alg.visual_mode,\
             self.alg.visual_first_encounter,\
             self.alg.vis_counter,\
@@ -732,21 +716,14 @@ class Controller:
             float(self.alg.x_vis_err),\
             float(self.alg.y_vis_err),\
             float(self.alg.z_vis_err),\
-            float(self.alg.vis_int_x),\
-            float(self.alg.vis_int_y),\
-            float(self.alg.vis_int_z),\
-            float(self.alg.vis_der_x),\
-            float(self.alg.vis_der_y),\
             float(self.sp.position.x),\
             float(self.sp.position.y),\
             float(self.sp.position.z),\
-            float(self.alg.fade_target_x),\
-            float(self.alg.fade_target_y),\
-            float(self.alg.fade_target_z),\
-            float(self.alg.mode_fade_increment),\
-            float(self.alg.vs_target_x),\
-            float(self.alg.vs_target_y),\
-            float(self.alg.vs_target_z))
+            float(self.sp_vel.linear.x),\
+            float(self.sp_vel.linear.y),\
+            float(self.sp_vel.linear.z),\
+            float(self.sp_vel.angular.z))
+            # {31:.3f} {32:.3f} {33:.3f} {34:.3f} {35:.3f} {36:.3f} {37:.3f} {38:.3f}
 
         if header is None:
             return printstr
