@@ -8,6 +8,7 @@ import numpy as np
 import time
 import tf.transformations
 import pymap3d as pm
+import platform
 
 # 3D point & Stamped Pose msgs
 from geometry_msgs.msg       import Point, PoseStamped, Twist
@@ -189,9 +190,40 @@ class Controller:
             #Image Algorithm info
             self.ARUCO_DICT    = cv2.aruco.Dictionary_get(cv2.aruco.DICT_6X6_100) #Initialize the Aruco Dictionary that the controller will use.
             self.ARUCO_PARAMS  = cv2.aruco.DetectorParameters_create()
-            self.camera_matrix = np.array([[277.191356, 0, 159.5],[0, 277.191356, 119.5], [0, 0, 1]]) #Camera matrix for simulated camera. From fpv_cam.sdf
-            self.camera_dist   = np.array([0, 0, 0, 0]) #Distortion Coefficients for the simlated camera. set to 0 in sim. From fpv_cam.sdf
+
+            my_system = platform.uname()
+
+            if(my_system.node == 'wilsons-PC'):
+                fx = 5.522067755300895e+02
+                fy = 7.449299628154979e+02
+                cx = 3.479833806300082e+02
+                cy = 2.925025107082283e+02
+                k1 = -0.425968726364035
+                k2 =  0.176325076893194
+                #fx = 277.191356
+                #fy = 277.191356
+                #cx = 159.5
+                #cy = 119.5
+                #k1 = 0
+                #k2 = 0
+                #hfov = 1.349
+            else:
+                #Camera intrinsic paramaters determined from matlab camera calibration...
+                #Set if we know we aren't simming.
+                fx = 5.522067755300895e+02
+                fy = 7.449299628154979e+02
+                cx = 3.479833806300082e+02
+                cy = 2.925025107082283e+02
+                k1 = -0.425968726364035
+                k2 =  0.176325076893194
+            
+            self.camera_matrix = np.array([[fx, 0, cx],[0, fy, cy], [0, 0, 1]]) #Camera matrix for simulated camera. From fpv_cam.sdf
+            self.camera_dist   = np.array([k1, k2, 0, 0]) #Distortion Coefficients for the simlated camera. set to 0 in sim. From fpv_cam.sdf
             self.img           = None
+
+            #self.camera_matrix = np.array([[277.191356, 0, 159.5],[0, 277.191356, 119.5], [0, 0, 1]]) #Camera matrix for simulated camera. From fpv_cam.sdf
+            #self.camera_dist   = np.array([0, 0, 0, 0]) #Distortion Coefficients for the simlated camera. set to 0 in sim. From fpv_cam.sdf
+            #self.img           = None
 
             #Localizing Algorithm info
             self.visual_mode            =     0 #When the quad is determine in position for step 2 this is true
