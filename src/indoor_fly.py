@@ -104,14 +104,20 @@ def main():
             cnt.checkVisAppInRadius()
             cnt.updateVisualDist()
 
-            vel_cmd_x   = -cnt.alg.x_vis_err
-            vel_cmd_y   = -cnt.alg.y_vis_err
-            vel_cmd_z   =  cnt.alg.z_vis_err
-            vel_cmd_yaw =  cnt.alg.yaw_vis_err
-
+            if(cnt.mship_visible):
+                vel_cmd_x   = -cnt.alg.x_vis_err
+                vel_cmd_y   = -cnt.alg.y_vis_err
+                vel_cmd_z   =  cnt.alg.z_vis_err
+                vel_cmd_yaw =  cnt.alg.yaw_vis_err
+            else:
+                vel_cmd_x   =  0.0
+                vel_cmd_y   =  0.0
+                vel_cmd_z   =  -0.1
+                vel_cmd_yaw =  0.0
+                 
             cnt.updateVisualServoCMD(vel_cmd_x, vel_cmd_y, vel_cmd_z, vel_cmd_yaw)
             sp_vel.publish(cnt.sp_vel)
-            rate.sleep()
+            print("Vel_CMD_X: " + str(vel_cmd_x) + " Vel_CMD_Y: " + str(vel_cmd_y) + " Vel_CMD_Z: " + str(vel_cmd_z) + " Vel_CMD_YAW: " + str(vel_cmd_yaw))
 
             if not(cnt.alg.visual_mode):
                   print('Exiting Visual Mode')

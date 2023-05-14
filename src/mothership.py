@@ -248,7 +248,7 @@ class Controller:
             self.algo_consecutive     =      0    #Track consecutive frames of within error range
             self.algo_counter_sat     =   1000    #Saturation value for position
             self.algorithm_threshold  =    750    #Value for algorithm thresholds
-            self.rendesvouz_dist      =    2.3    #distance in M that the rendesvouz point will be
+            self.rendesvouz_dist      =    1.0    #distance in M that the rendesvouz point will be
             self.quad_radius          =    0.1    #Uncertainty sphere radius of the quadrotor
             self.safe_radius          =    1.2    #Store the safe radius that is calculated for the visual algorithm
             self.err_mag              =    0.0    #Err mag calculated for the visual algorithm
@@ -274,7 +274,7 @@ class Controller:
             self.y_vis_err                 =     0.0 
             self.z_vis_err                 =     0.0
             self.yaw_vis_err               =     0.0
-            self.vis_target_dist           =    0.25 #How many meters the quad will target to be from the target
+            self.vis_target_dist           =     1.0 #How many meters the quad will target to be from the target
 
             #Rendezvous target, 2m distance from the ship. Position behind and below to match quads estimated pitch for speed.
             self.rs_target_x = 0.0
@@ -378,10 +378,10 @@ class Controller:
         #Trying to Debug
         #print('Going to X: ' + str(self.alg.rs_target_x) + ' Y: ' + str(self.alg.rs_target_y) + ' Z: ' + str(self.alg.rs_target_z))     
     def updateVisualServoCMD(self, x_error, y_error, z_error, yaw_error):
-        self.sp_vel.linear.x = self.saturateValue((x_error*0.5), -0.7, 0.7)
-        self.sp_vel.linear.y = self.saturateValue((y_error*0.5), -0.7, 0.7)
-        self.sp_vel.linear.z = self.saturateValue((z_error*0.8), -0.5, 0.5)
-        self.sp_vel.angular.z = self.saturateValue((yaw_error*0.002), -0.5, 0.5)
+        self.sp_vel.linear.x = self.saturateValue((x_error*0.5), -0.2, 0.2)
+        self.sp_vel.linear.y = self.saturateValue((y_error*0.5), -0.2, 0.2)
+        self.sp_vel.linear.z = self.saturateValue((z_error*0.8), -0.3, 0.3)
+        self.sp_vel.angular.z = self.saturateValue((yaw_error*0.002), -0.1, 0.1)
 
     def updateVisErr(self, cam2aruco):
         d = self.alg.vis_app_dist
