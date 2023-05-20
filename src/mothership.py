@@ -248,12 +248,23 @@ class Controller:
             self.algo_consecutive     =      0    #Track consecutive frames of within error range
             self.algo_counter_sat     =   1000    #Saturation value for position
             self.algorithm_threshold  =    750    #Value for algorithm thresholds
-            self.rendesvouz_dist      =    1.0    #distance in M that the rendesvouz point will be
+            self.rendesvouz_dist      =    2.0    #distance in M that the rendesvouz point will be
             self.quad_radius          =    0.1    #Uncertainty sphere radius of the quadrotor
-            self.safe_radius          =    1.2    #Store the safe radius that is calculated for the visual algorithm
+            self.safe_buffer          =    0.1    #Store the safe radius that is calculated for the visual algorithm
             self.err_mag              =    0.0    #Err mag calculated for the visual algorithm
             self.x_vis_offset         =    0.0    #Offset based on a visual id of marker for x
             self.y_vis_offset         =    0.0    #Offset based on a visual id of marker for y
+            self.x_search_offset  =    0.0    #Offset to search for marker not immediately found
+            self.y_search_offset  =    0.0    #Offset to search for marker not immediately found
+
+            self.searchPointUpdated = False
+
+            self.x_rendesvouz_error = 0.0
+            self.y_rendesvouz_error = 0.0
+            self.search_count = 0
+            self.search_x_array = [2.5, 2.5, 0.0, -2.5, -2.5, -2.5,  0.0,  2.5]
+            self.search_y_array = [0.0, 2.5, 2.5,  2.5,  0.0, -2.5, -2.5, -2.5]
+            self.markerFound = False
 
             #Previous Set Point Value for storage
             self.x_setpoint_prev      =    0.0
@@ -268,13 +279,13 @@ class Controller:
             self.vis_app_consecutive       =       0
             self.vis_app_threshold         =     750 #Threshold to turn on or off distance subtraction.
             self.vis_app_counter_min_max   =    1250
-            self.vis_app_dist_sub_rate     =   .0001 #Shows how many meters will be removed per frame. runs @~100Hz. this is ~1mm per second. about 1 minute to go 1m
+            self.vis_app_dist_sub_rate     =   .0005 #Shows how many meters will be removed per frame. runs @~100Hz. this is ~1mm per second. about 1 minute to go 1m
             self.quad_safe                 =       0 #Store if the quad is in the safe zone for visual servo
             self.x_vis_err                 =     0.0
             self.y_vis_err                 =     0.0 
             self.z_vis_err                 =     0.0
             self.yaw_vis_err               =     0.0
-            self.vis_target_dist           =     1.0 #How many meters the quad will target to be from the target
+            self.vis_target_dist           =     0.5 #How many meters the quad will target to be from the target
 
             #Rendezvous target, 2m distance from the ship. Position behind and below to match quads estimated pitch for speed.
             self.rs_target_x = 0.0
@@ -371,12 +382,25 @@ class Controller:
         self.sp_glob.altitude  = msg.altitude
 
     def updateRendesvousLoc(self):
-        self.alg.rs_target_x = self.local_pos.x + self.mship_x_err + self.alg.x_vis_offset
-        self.alg.rs_target_y = self.local_pos.y + self.mship_y_err + self.alg.y_vis_offset
+        self.alg.rs_target_x = self.local_pos.x + self.mship_x_err - self.alg.x_vis_offset + self.alg.x_search_offset + 1.3
+        self.alg.rs_target_y = self.local_pos.y + self.mship_y_err - self.alg.y_vis_offset + self.alg.y_search_offset - 2.1
         self.alg.rs_target_z = self.local_pos.z + self.mship_z_err - self.alg.rendesvouz_dist  
 
         #Trying to Debug
         #print('Going to X: ' + str(self.alg.rs_target_x) + ' Y: ' + str(self.alg.rs_target_y) + ' Z: ' + str(self.alg.rs_target_z))     
+    def updateSearchPoint(self, x, y):
+        self.alg.x_search_offset = x
+        self.alg.y_search_offset = y
+        self.alg.searchPointUpdated = True
+
+    def clearVisOffset(self):
+        self.alg.x_vis_offset = 0.0
+        self.alg.y_vis_offset = 0.0
+
+    def clearSearchPointForVisOffset(self):
+        self.alg.x_search_offset = 0.0
+        self.alg.y_search_offset = 0.0
+    
     def updateVisualServoCMD(self, x_error, y_error, z_error, yaw_error):
         self.sp_vel.linear.x = self.saturateValue((x_error*0.5), -0.2, 0.2)
         self.sp_vel.linear.y = self.saturateValue((y_error*0.5), -0.2, 0.2)
@@ -399,26 +423,23 @@ class Controller:
 
     def checkVisAppInRadius(self):
         #Calculate (x,y,z) location of vis guidance center
-        d = self.alg.vis_app_dist
+        d = self.alg.vis_app_dist - self.alg.rendesvouz_dist
         quad_rad = self.alg.quad_radius
 
         #Calculate the safe zone radius
-        safe_radius = 0.5 * (d**2 / self.alg.rendesvouz_dist)  #R = 0.5* (d^2 / d_not)
+        safe_buffer = 0.1  #R = 0.5* (d^2 / d_not)
 
-        #If close to quad use other portion of the system of equations.
-        if(safe_radius < (2 * quad_rad)):
-            safe_radius = 2 * quad_rad
 
-        err_mag = math.sqrt((self.alg.x_vis_err ** 2) + (self.alg.y_vis_err ** 2) + ((self.alg.z_vis_err) ** 2))
+        err_mag = abs(d)
 
-        #print str("Error Mag: " + str(err_mag) + " safe_radius: " + str(safe_radius))
-        self.alg.safe_radius = safe_radius
+        print("Error Mag: " + str(err_mag) + " safe_radius: " + str(safe_buffer))
+        self.alg.safe_radius = safe_buffer
         self.alg.err_mag     = err_mag
 
-        if(err_mag + quad_rad < safe_radius):
+        if(err_mag < safe_buffer):
             self.alg.quad_safe = 1
         else:
-            self.alg.quad_safe = 0
+            self.alg.quad_safe = 1
 
     def updateVisualDist(self):
         #Function here will store the confidence of the quads position in approach. It will also calculate D to move the quad closer to the target
@@ -506,12 +527,6 @@ class Controller:
             if(self.mship_not_visible_count > self.mship_debounce and self.mship_visible):
                 self.mship_visible = 0
             
-    def fadeToVisLoc(self):
-        #Take the Two types and fade and calculate the fade value.
-        self.alg.fade_target_x = self.alg.rs_target_x * (1 - self.alg.mode_fade_increment) + self.alg.vs_target_x * (self.alg.mode_fade_increment)
-        self.alg.fade_target_y = self.alg.rs_target_y * (1 - self.alg.mode_fade_increment) + self.alg.vs_target_y * (self.alg.mode_fade_increment)
-        self.alg.fade_target_z = self.alg.rs_target_z * (1 - self.alg.mode_fade_increment) + self.alg.vs_target_z * (self.alg.mode_fade_increment)
-
     def cam2Local(self, cam_pts):
         #Here in the function build the Rot matrix of the quadcopter, take XYZ points from camera, [y x z 1] format. Rot_Mat * Cam_Pts will give Aruco wrld pts
         roll  = self.roll
@@ -561,7 +576,7 @@ class Controller:
                     aruco_len = 0.25
 
                 #Get the rotation vec and translation vec of the camera to the aruco I believe. can use this to control the quad.
-                (rvecs, tvecs) = cv2.aruco.estimatePoseSingleMarkers(corners[cnt], aruco_len, self.alg.camera_matrix, self.alg.camera_dist)
+                rvecs, tvecs, _objPoints = cv2.aruco.estimatePoseSingleMarkers(corners[cnt], aruco_len, self.alg.camera_matrix, self.alg.camera_dist)
 
                 #Find the tag. Store the xyz error and yaw offset
                 self.alg.x_vis_err   = -tvecs[0][0][1]
@@ -572,29 +587,31 @@ class Controller:
                 self.mship_not_visible_count = 0
 
                 #Printing for debug purposes
-                loc_string = str('X-Dist: ') + str(self.alg.x_vis_err) + str(' Y-Dist: ') + str(self.alg.y_vis_err) + str(' z-dist: ') + str(self.alg.z_vis_err)
-                print(loc_string)
+                #loc_string = str('X-Dist: ') + str(self.alg.x_vis_err) + str(' Y-Dist: ') + str(self.alg.y_vis_err) + str(' z-dist: ') + str(self.alg.z_vis_err)
+                #print(loc_string)
                 cnt = cnt + 1
         else:
             if(self.mship_not_visible_count > self.mship_debounce and self.mship_visible):
                 self.mship_visible = 0
                 print('Mship not visible')
 
-            print('tag not visible')
+            #print('tag not visible')
 
             self.mship_not_visible_count = self.mship_not_visible_count + 1
 
-        #cv2.imshow('cv_img', grey_im)
-        #cv2.waitKey(2)
+        cv2.imshow('cv_img', grey_im)
+        cv2.waitKey(2)
 
     def determineAtRendesvous(self):
         #At Rendesvouz if Quadrotor is withing 0.5m error in x,y,z count up.
-        x_err = abs(self.mship_x_err)
-        y_err = abs(self.mship_y_err)
-        z_err = abs(self.mship_z_err - self.alg.rendesvouz_dist)
+        x_err = abs(self.alg.rs_target_x - self.local_pos.x)
+        y_err = abs(self.alg.rs_target_y - self.local_pos.y)
+        z_err = abs(self.alg.rs_target_z - self.local_pos.z)
+
+        #print('X error: ' + str(x_err) + ' Y error: ' + str(y_err) + 'Z error: ' + str(z_err))
 
         #Error allowed will be the sphere of the quad inside an allowable error sphere that is a function of the rendesvouz distance.
-        error_Radius = 0.5 * self.alg.rendesvouz_dist #This value is the error sphere.
+        error_Radius = 0.2 * self.alg.rendesvouz_dist #This value is the error sphere.
 
         # Check if the quad is within error sphere
         err_dist = (math.sqrt((x_err**2)+(y_err**2)+(z_err**2)))
@@ -613,7 +630,7 @@ class Controller:
             if self.alg.algo_last == 1:
                 #If isn't saturated add to counter. If saturated Pass
                 if (self.alg.algo_counter < self.alg.algo_counter_sat):
-                    self.alg.algo_counter = self.alg.algo_counter + (0.001 * self.alg.algo_consecutive**1.3)
+                    self.alg.algo_counter = self.alg.algo_counter + (0.01 * self.alg.algo_consecutive**1.3)
                     self.alg.algo_consecutive = self.alg.algo_consecutive + 1
 
                     #Check if it becomes saturated
@@ -630,7 +647,7 @@ class Controller:
         else:
             if self.alg.algo_last == 0:
                 if(self.alg.algo_counter > -self.alg.algo_counter_sat):
-                    self.alg.algo_counter     = self.alg.algo_counter - (0.001 * self.alg.algo_consecutive**1.3)
+                    self.alg.algo_counter     = self.alg.algo_counter - (0.01 * self.alg.algo_consecutive**1.3)
                     self.alg.algo_consecutive = self.alg.algo_consecutive + 1
 
                     if(self.alg.algo_counter < -self.alg.algo_counter_sat):
@@ -646,6 +663,8 @@ class Controller:
             self.alg.at_rendesvous = 1
         else:
             self.alg.at_rendesvous = 0
+    def clearAlgoCounter(self):
+        self.alg.algo_counter = 0
 
     def determineVisualAlg(self):
             if(self.mship_visible):

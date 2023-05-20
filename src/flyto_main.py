@@ -110,12 +110,36 @@ def main():
             cnt.updateSp(x_cmd, y_cmd, z_cmd)
             sp_pub.publish(cnt.sp)
             rate.sleep()
+            if(cnt.alg.at_rendesvous):
+                 print('Begin Search for Tag')
         
         #Visual Tag Identification State
-        while(cnt.alg.rendesvous_mode and cnt.alg.at_rendesvous and not cnt.alg.visual_mode):
+        while(not cnt.alg.visual_mode):
             cnt.determineVisualAlg()
-            cnt.checkMarkerSetMarkerRendesvouzPoint()
             cnt.determineEnterVisualMode()
+            cnt.updateRendesvousLoc()
+            cnt.determineAtRendesvous()
+
+            if(not cnt.mship_visible and not cnt.alg.searchPointUpdated):
+                print('Updating Search Point')
+                a = cnt.alg.search_count % 8
+                cnt.updateSearchPoint(cnt.alg.search_x_array[a], cnt.alg.search_y_array[a])
+                cnt.clearVisOffset()
+                cnt.updateRendesvousLoc()
+
+            if(not cnt.mship_visible and cnt.alg.at_rendesvous):
+                cnt.alg.searchPointUpdated = False
+                cnt.alg.at_rendesvous = False
+                cnt.alg.search_count = cnt.alg.search_count + 1
+                cnt.clearAlgoCounter()
+                print("Search Count : " + str(cnt.alg.search_count))
+
+            if(cnt.mship_visible and cnt.alg.at_rendesvous and not cnt.alg.markerFound):
+                #cnt.clearSearchPointForVisOffset()
+                cnt.checkMarkerSetMarkerRendesvouzPoint()
+                cnt.updateRendesvousLoc()
+                cnt.alg.markerFound = True
+                print("Marker Found")
 
             x_cmd = cnt.alg.rs_target_x
             y_cmd = cnt.alg.rs_target_y
