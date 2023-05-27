@@ -386,7 +386,7 @@ class Controller:
         self.sp_glob.longitude = msg.longitude
         self.sp_glob.altitude  = msg.altitude
     def updateRendesvousLoc(self):
-        self.alg.rs_target_x = self.local_pos.x + self.mship_x_err - self.alg.x_vis_offset + self.alg.x_search_offset
+        self.alg.rs_target_x = self.local_pos.x + self.mship_x_err - self.alg.x_vis_offset + self.alg.x_search_offset 
         self.alg.rs_target_y = self.local_pos.y + self.mship_y_err - self.alg.y_vis_offset + self.alg.y_search_offset
         self.alg.rs_target_z = self.local_pos.z + self.mship_z_err - self.alg.rendesvouz_dist  
 
@@ -458,7 +458,7 @@ class Controller:
 
         r_error = math.sqrt((self.alg.x_vis_err**2) + (self.alg.y_vis_err**2) + ((self.alg.z_vis_err - self.alg.vis_target_dist)**2))
 
-        if(r_error < self.alg.at_location_err_radius):
+        if((r_error < self.alg.at_location_err_radius) and (self.alg.vis_target_dist == self.alg.vis_app_dist)):
             self.alg.at_location_counter += 1
             self.alg.at_location_reset_buffer = 0
             
@@ -768,8 +768,8 @@ class Controller:
         #If the user calls for header return the header or else just return the data. 
         printheader = 'Elapsed_Time local_X local_Y local_Z visual_mode visual_first_enc Vis_counter Vis_last Vis_Consecutive ' +\
             'Rendesvous_mode Algo_counter Algo_last Algo_consecutive Vis_app_dist Vis_app_cnt Vis_app_last Vis_app_consecutive quad_radius quad_safe x_vis_err y_vis_err z_vis_err '+\
-            'x_setpoint y_setpoint z_setpoint \n'
-        printstr = '{0:.3f} {1:.3f} {2:.3f} {3:.3f} {4} {5} {6} {7} {8} {9} {10} {11} {12} {13:.3f} {14} {15} {16} {17:.3f} {18:.3f} {19:.3f} {20} {21:.3f} {22:.3f} {23:.3f} {24:.3f} {25:.3f} {26:.3f} {27:.3f} {28:.3f} {29:.3f} {30:.3f} {31:.3f} {32:.3f} {33:.3f} {34:.3f} {35:.3f} {36}\n'.format(\
+            'x_setpoint y_setpoint z_setpoint x_vel_cmd_linear y_vel_cmd_linear z_vel_cmd_linear yaw_vel_cmd_angular x_search_offset y_search_offset x_vis_int y_vis_int z_vis_int rendezvous_distance ready_to_mate\n'
+        printstr = '{0:.3f} {1:.3f} {2:.3f} {3:.3f} {4} {5} {6} {7} {8} {9} {10} {11} {12} {13:.3f} {14} {15} {16} {17:.3f} {18:.3f} {19:.3f} {20} {21:.3f} {22:.3f} {23:.3f} {24:.3f} {25:.3f} {26:.3f} {27:.3f} {28:.3f} {29:.3f} {30:.3f} {31:.3f} {32:.3f} {33:.3f} {34:.3f} {35:.3f} {36} {37}\n'.format(\
             elapsed_time,\
             self.local_pos.x, \
             self.local_pos.y,\
@@ -806,7 +806,8 @@ class Controller:
             float(self.alg.x_vis_int),\
             float(self.alg.y_vis_int),\
             float(self.alg.z_track_int),\
-            self.alg.rendesvouz_dist)
+            self.alg.rendesvouz_dist,\
+            self.alg.ready_to_mate)
             # {31:.3f} {32:.3f} {33:.3f} {34:.3f} {35:.3f} {36:.3f} {37:.3f} {38:.3f}
 
         if header is None:
