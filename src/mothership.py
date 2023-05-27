@@ -789,8 +789,6 @@ class Controller:
             self.alg.vis_app_consecutive,\
             self.alg.quad_radius,\
             self.alg.quad_radius,\
-            self.alg.err_mag,\
-            self.alg.quad_safe,\
             float(self.alg.x_vis_err),\
             float(self.alg.y_vis_err),\
             float(self.alg.z_vis_err),\
