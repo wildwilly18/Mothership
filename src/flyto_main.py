@@ -7,6 +7,10 @@ import numpy as np
 
 def main():
 
+    logName = input("Input Log Name: ")
+    logName = logName + '.txt'
+    print("Log Named: " + logName)
+    
     # initiate node
     rospy.init_node('setpoint_node', anonymous=True)
 
@@ -47,6 +51,13 @@ def main():
 
     # Setpoint velocity publisher
     sp_vel = rospy.Publisher('uav0/mavros/setpoint_velocity/cmd_vel_unstamped', Twist)
+
+    logFile = open(logName, 'w')
+    
+    printheader = cnt.logData('header')
+    print(printheader)
+
+    logFile.writelines(printheader)
 
     modes.setPositionMode()
     rate.sleep()
@@ -94,7 +105,9 @@ def main():
                   cnt.alg.rendesvous_mode = 1
                   cnt.alg.takeoff_finished = True
                   print('Take-off finished')
-            
+
+            line = cnt.logData()
+            logFile.writelines(line)
             rate.sleep()
 
         #Rendesvous State
@@ -109,9 +122,12 @@ def main():
 
             cnt.updateSp(x_cmd, y_cmd, z_cmd)
             sp_pub.publish(cnt.sp)
-            rate.sleep()
             if(cnt.alg.at_rendesvous):
                  print('Begin Search for Tag')
+
+            line = cnt.logData()
+            logFile.writelines(line)
+            rate.sleep()    
         
         #Visual Tag Identification State
         while(not cnt.alg.visual_mode):
@@ -147,6 +163,9 @@ def main():
 
             cnt.updateSp(x_cmd, y_cmd, z_cmd)
             sp_pub.publish(cnt.sp)
+
+            line = cnt.logData()
+            logFile.writelines(line)
             rate.sleep()
 
         #State for visual mode, here we command velocities and slowly move up to the marker until within range
@@ -155,15 +174,25 @@ def main():
             cnt.determineExitVisualMode()
             cnt.checkVisAppInRadius()
             cnt.updateVisualDist()
+            cnt.checkForInLocation()
 
             vel_cmd_x   = -cnt.alg.x_vis_err
             vel_cmd_y   = -cnt.alg.y_vis_err
             vel_cmd_z   = cnt.alg.z_vis_err - cnt.alg.vis_app_dist
             vel_cmd_yaw = cnt.alg.yaw_vis_err
 
-            print('Z Velocity Command: ' + str(vel_cmd_z) + ' Vis App Dist: ' + str(cnt.alg.vis_app_dist))
+            #print('Z Velocity Command: ' + str(vel_cmd_z) + ' Vis App Dist: ' + str(cnt.alg.vis_app_dist) + ' Z-Err' + str(cnt.alg.z_vis_err))
+            if(cnt.alg.ready_to_mate):
+                 line = cnt.logData()
+                 logFile.writelines(line)
+                 print("SUCCESS! READY TO MATE!")
+                 exit()
+
             cnt.updateVisualServoCMD(vel_cmd_x, vel_cmd_y, vel_cmd_z, -vel_cmd_yaw)
             sp_vel.publish(cnt.sp_vel)
+
+            line = cnt.logData()
+            logFile.writelines(line)
             rate.sleep()
 
         
