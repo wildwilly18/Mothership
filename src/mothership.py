@@ -436,14 +436,13 @@ class Controller:
         #print str('x_vis_err:' + str(self.alg.x_vis_err))
     def checkVisAppInRadius(self):
         #Calculate (x,y,z) location of vis guidance center
-        d = self.alg.vis_app_dist - self.alg.rendesvouz_dist
+        err = math.sqrt((self.alg.x_vis_err**2) + (self.alg.y_vis_err**2) + ((self.alg.z_vis_err - self.alg.vis_app_dist)**2))
         quad_rad = self.alg.quad_radius
 
         #Calculate the safe zone radius
-        safe_buffer = 0.1  #R = 0.5* (d^2 / d_not)
+        safe_buffer = 0.2
 
-
-        err_mag = abs(d)
+        err_mag = abs(err)
 
         #print("Error Mag: " + str(err_mag) + " safe_radius: " + str(safe_buffer))
         self.alg.safe_radius = safe_buffer
@@ -452,7 +451,7 @@ class Controller:
         if(err_mag < safe_buffer):
             self.alg.quad_safe = 1
         else:
-            self.alg.quad_safe = 1
+            self.alg.quad_safe = 0
     def checkForInLocation(self):
         safe_radius = 0.2
 
@@ -725,7 +724,7 @@ class Controller:
                 if self.alg.vis_last == 0:
                     #If counter isn't saturated add to counter using function and increment counter. If Saturated pass.
                     if(self.alg.vis_counter > -self.alg.vis_counter_max_min):
-                        self.alg.vis_counter = self.alg.vis_counter - (0.001 * self.alg.vis_consecutive**1.3)
+                        self.alg.vis_counter = self.alg.vis_counter - (0.01 * self.alg.vis_consecutive**1.3)
                         self.alg.vis_consecutive = self.alg.vis_consecutive + 1
 
                         #If counter becomes less than the saturation max/min value then set to max/min value.
@@ -736,7 +735,7 @@ class Controller:
                 else:
                     self.alg.vis_last        =  0
                     self.alg.vis_consecutive =  1
-                    self.alg.vis_counter = self.alg.vis_counter - (0.001 * self.alg.vis_consecutive**1.3)
+                    self.alg.vis_counter = self.alg.vis_counter - (0.01 * self.alg.vis_consecutive**1.3)
     def checkMarkerSetMarkerRendesvouzPoint(self):
         if(self.mship_visible):
         #with those points add offset to rendesvouz... Not that this needs to be figured out for rotation frame

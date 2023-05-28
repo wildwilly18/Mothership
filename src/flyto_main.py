@@ -188,7 +188,12 @@ def main():
                  print("SUCCESS! READY TO MATE!")
                  exit()
 
-            cnt.updateVisualServoCMD(vel_cmd_x, vel_cmd_y, vel_cmd_z, -vel_cmd_yaw)
+            if(cnt.mship_visible):
+                cnt.updateVisualServoCMD(vel_cmd_x, vel_cmd_y, vel_cmd_z, -vel_cmd_yaw)
+            else:
+                 cnt.updateVisualServoCMD(0.0, 0.0, -0.03, 0.0)
+                 print("cmd neg Z")
+
             sp_vel.publish(cnt.sp_vel)
 
             line = cnt.logData()
