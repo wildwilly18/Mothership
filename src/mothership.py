@@ -210,12 +210,12 @@ class Controller:
             else:
                 #Camera intrinsic paramaters determined from matlab camera calibration...
                 #Set if we know we aren't simming.
-                fx = 5.522067755300895e+02
-                fy = 7.449299628154979e+02
-                cx = 3.479833806300082e+02
-                cy = 2.925025107082283e+02
-                k1 = -0.425968726364035
-                k2 =  0.176325076893194
+                fx = 551.1439
+                fy = 551.7652
+                cx = 331.7447
+                cy = 235.9727
+                k1 = -0.3500
+                k2 =  0.1487
             
             self.camera_matrix = np.array([[fx, 0, cx],[0, fy, cy], [0, 0, 1]]) #Camera matrix for simulated camera. From fpv_cam.sdf
             self.camera_dist   = np.array([k1, k2, 0, 0]) #Distortion Coefficients for the simlated camera. set to 0 in sim. From fpv_cam.sdf
@@ -788,8 +788,6 @@ class Controller:
             self.alg.vis_app_consecutive,\
             self.alg.quad_radius,\
             self.alg.quad_radius,\
-            self.alg.err_mag,\
-            self.alg.quad_safe,\
             float(self.alg.x_vis_err),\
             float(self.alg.y_vis_err),\
             float(self.alg.z_vis_err),\
